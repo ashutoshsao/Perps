@@ -61,7 +61,13 @@ async function waitForResponse() {
           lastBackendId = msg.id;
         }
 
-        const engineResponse: EngineResponse = msg.message;
+        const raw = msg.message;
+        const engineResponse: EngineResponse = {
+          correlationId: raw.correlationId,
+          ok: raw.ok === "true",
+          data: raw.data ? JSON.parse(raw.data) : undefined,
+          error: raw.error
+        }
         const pending = loopbackResponses.get(engineResponse.correlationId);
         if (!pending) continue;
 

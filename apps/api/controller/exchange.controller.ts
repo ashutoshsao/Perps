@@ -14,9 +14,9 @@ export const addBalance = async (req: Request, res: Response) => {
       userId,
       amount
     })
-    res.status(200).json({ data: response.data })
+    res.status(200).json({ response })
 
   } catch (error) {
-    res.status(400).json({ error })
+    res.status(400).json({ error: (error as Error).message })
   }
 }

@@ -1,28 +1,111 @@
+import BTree from "sorted-btree";
+
 type OrderType = "market" | "limit";
 type Side = "buy" | "sell";
-
+type OrderStatus = "open" | "filled" | "partially_filled" | "cancelled"
 export type EngineCommandType =
   | "create_order"
   | "cancel_order"
-  | "add_balance"
+  | "onramp"
   | "get_balance"
   | "get_depth"
   | "update_index_price"
   | "create_market"
 
-export type createOrderType = {
-  orderType: OrderType,
+
+export type RestingOrder = {
+  userId: string,
+  qty: number,
+  filledQty: number,
+  margin: number,
+  leverage: number,
+  createdAt: number,
+  updatedAt: number
+}
+
+export type Fill = {
+  fillId: string,
+  makerUserId: string,
+  takerUserId: string,
+  makerOrderId: string,
+  takerOrderId: string,
+  makerSide: Side,
+  qty: number,
+  price: number,
+  createdAt: number,
+  symbol: string
+}
+
+export type OrderRecord = {
+  orderId: string,
   side: Side,
+  orderType: OrderType,
+  status: OrderStatus
+  userId: string,
+  symbol: string,
+  qty: number,
+  filledQty: number,
+  margin: number,
+  leverage: number,
+  price: number,
+  fills: Fill[]
+  createdAt: number,
+  updatedAt: number
+}
+
+export type Position = {
+  userId: string,
+  symbol: string,
+  qty: number,
+  leverage: number,
+  margin: number,
+  averagePrice: number,
+  createdAt: number,
+  updatedAt: number
+}
+
+export type updatePositionType = {
+  userId: string,
+  symbol: string,
+  side: Side,
+  fillQty: number,
+  fillPrice: number,
+  fillMargin: number,
+  leverage: number
+}
+export type Balance = {
+  available: number,
+  locked: number
+}
+
+export type Orderbook = {
+  asks: BTree<number, RestingOrder[]>,
+  bids: BTree<number, RestingOrder[]>,
+  lastTradedPrice: number
+}
+
+
+export type createOrderType = {
+  userId: string,
+  symbol: string
+  orderType: OrderType,
+  side: "limit",
   price: number,
   qty: number,
   leverage: number,
 } | {
+  userId: string,
+  symbol: string
   orderType: OrderType,
-  side: Side,
+  side: "market",
   price: number,
   qty: number,
   leverage: number,
   slippageBps: number
+}
+
+export type getBalanceType = {
+  userId: string,
 }
 
 export type cancelOrderType = {
@@ -35,6 +118,7 @@ export interface EngineResponse {
   ok: boolean
   data?: unknown
   error?: string
+  globalEvent?: boolean
 }
 
 export interface addBalanceType {

@@ -32,6 +32,27 @@
         "typescript": "5.5.4",
       },
     },
+    "apps/engine": {
+      "name": "@repo/engine",
+      "version": "0.0.0",
+      "dependencies": {
+        "@repo/db": "workspace:*",
+        "@repo/redis": "workspace:*",
+        "@repo/types": "workspace:*",
+        "argon2": "^0.44.0",
+        "express": "^5.2.1",
+        "jsonwebtoken": "^9.0.3",
+        "zod": "^4.4.3",
+      },
+      "devDependencies": {
+        "@repo/eslint-config": "*",
+        "@repo/typescript-config": "*",
+        "@types/bun": "latest",
+        "@types/express": "^5.0.6",
+        "eslint": "^8.57.0",
+        "typescript": "5.5.4",
+      },
+    },
     "apps/web": {
       "name": "web",
       "version": "0.0.0",
@@ -261,6 +282,8 @@
     "@repo/api": ["@repo/api@workspace:apps/api"],
 
     "@repo/db": ["@repo/db@workspace:packages/db"],
+
+    "@repo/engine": ["@repo/engine@workspace:apps/engine"],
 
     "@repo/eslint-config": ["@repo/eslint-config@workspace:packages/eslint-config"],
 

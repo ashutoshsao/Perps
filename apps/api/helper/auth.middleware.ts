@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import jwt from "jsonwebtoken";
+import jwt, { JwtPayload } from "jsonwebtoken";
 import { Env } from "../utils/config";
 
 export const verifyAuth = (req: Request, res: Response, next: NextFunction) => {
@@ -14,19 +14,12 @@ export const verifyAuth = (req: Request, res: Response, next: NextFunction) => {
 
     const token = authHeader.slice(7);
 
-    const verify = jwt.verify(token, Env.JWT_SECRET);
-
-    if (!verify) {
-      res.status(401).json({
-        message: "Invalid token"
-      })
-      return
-    }
-
+    const decoded = jwt.verify(token, Env.JWT_SECRET) as JwtPayload;
+    req.userId = decoded.userId;
     next();
   } catch (error) {
     res.status(400).json({
-      message: "error while verification"
+      message: "Invalid token"
     })
   }
 }

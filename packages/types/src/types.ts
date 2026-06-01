@@ -33,15 +33,6 @@ export const CreateOrderApiSchema = z.discriminatedUnion("orderType", [
   }),
 ])
 
-export const updatePositionPayload = z.object({
-  userId: z.string(),
-  symbol: z.string(),
-  side: side,
-  fillQty: z.number(),
-  fillPrice: z.number(),
-  fillMargin: z.number(),
-  leverage: z.number()
-})
 
 export const CreateMarketApiSchema = z.object({
   symbol: z.string().min(1),
@@ -62,7 +53,6 @@ export const DepthParamsSchema = z.object({
   symbol: z.string().min(1),
 })
 
-export type updatePositionPayload = z.infer<typeof updatePositionPayload>;
 export type SignupApiType = z.infer<typeof SignupApiSchema>
 export type SigninApiType = z.infer<typeof SigninApiSchema>
 export type CreateOrderApiType = z.infer<typeof CreateOrderApiSchema>
