@@ -1,6 +1,6 @@
 import { BALANCES } from "../engine-store";
 
-export function getBalance(userId: string, symbol: string) {
+export function fetchBalance(userId: string, symbol: string) {
   let balances = BALANCES.get(userId);
   if (!balances) {
     balances = new Map();

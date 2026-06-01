@@ -1,5 +1,5 @@
-import { createOrderType } from "@repo/types";
+import { updateIndexPriceType } from "@repo/types";
 
-export function updateIndexPrice(payload:) {
+export function updateIndexPrice(payload: updateIndexPriceType) {
 
 }

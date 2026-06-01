@@ -6,12 +6,16 @@ type OrderStatus = "open" | "filled" | "partially_filled" | "cancelled"
 export type EngineCommandType =
   | "create_order"
   | "cancel_order"
-  | "onramp"
+  | "add_balance"
   | "get_balance"
   | "get_depth"
   | "update_index_price"
   | "create_market"
 
+export type updateIndexPricePayload = {
+  symbol: string,
+  price: number
+}
 
 export type RestingOrder = {
   userId: string,
@@ -64,7 +68,7 @@ export type Position = {
   updatedAt: number
 }
 
-export type updatePositionType = {
+export type updatePositionPayload = {
   userId: string,
   symbol: string,
   side: Side,
@@ -85,7 +89,7 @@ export type Orderbook = {
 }
 
 
-export type createOrderType = {
+export type createOrderPayload = {
   userId: string,
   symbol: string
   orderType: OrderType,
@@ -104,11 +108,11 @@ export type createOrderType = {
   slippageBps: number
 }
 
-export type getBalanceType = {
+export type getBalancePayload = {
   userId: string,
 }
 
-export type cancelOrderType = {
+export type cancelOrderPayload = {
   userId: string,
   orderId: string
 }
@@ -121,15 +125,15 @@ export interface EngineResponse {
   globalEvent?: boolean
 }
 
-export interface addBalanceType {
+export interface addBalancePayload {
   userId: string,
   amount: number
 }
 
 export type EnginePayload =
-  | createOrderType
-  | cancelOrderType
-  | addBalanceType
+  | createOrderPayload
+  | cancelOrderPayload
+  | addBalancePayload
 
 
 export interface EngineRequest {

@@ -1,5 +1,5 @@
-import { createOrderType } from "@repo/types";
+import { createOrderPayload } from "@repo/types";
 
-export function createOrder(payload: createOrderType) {
+export function createOrder(payload: createOrderPayload) {
 
 }

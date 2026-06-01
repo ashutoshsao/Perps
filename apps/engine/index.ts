@@ -34,8 +34,9 @@ async function startUp() {
 
         await writeRedis.xAdd(response.responseQueue, '*', {
           correlationId,
-          ok: "true",
-          data: JSON.stringify(response.data),
+          ok: response.ok ? "true" : "false",
+          error: response.error ?? '',
+          data: response.data ? JSON.stringify(response.data) : '',
         })
         //if not backendOnly so also put in 
         if (response.globalEvent) {

@@ -1,5 +1,5 @@
-import { cancelOrderType } from "@repo/types";
+import { cancelOrderPayload } from "@repo/types";
 
-export function cancelOrder(payload: cancelOrderType) {
+export function cancelOrder(payload: cancelOrderPayload) {
 
 }
