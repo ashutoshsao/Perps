@@ -1,0 +1,87 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id         String  @id @default(uuid())
+  username   String  @unique
+  name       String?
+  password   String
+  orders     Order[]
+  makerFills Fill[]  @relation("maker_user")
+  takerFills Fill[]  @relation("taker_user")
+}
+
+model Market {
+  id          String   @id @default(uuid())
+  symbol      String   @unique
+  imageUrl    String
+  maxLeverage Int
+  minQty      Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  orders      Order[]
+}
+
+model Order {
+  id            String      @id @default(uuid())
+  userId        String
+  marketId      String
+  orderType     OrderType
+  side          Side
+  qty           Int
+  filledQty     Int         @default(0)
+  price         Int
+  leverage      Int
+  initialMargin Int
+  status        OrderStatus
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  user          User        @relation(fields: [userId], references: [id])
+  market        Market      @relation(fields: [marketId], references: [id])
+  makerFills    Fill[]      @relation("maker_order")
+  takerFills    Fill[]      @relation("taker_order")
+}
+
+model Fill {
+  id           String   @id @default(uuid())
+  qty          Int
+  price        Int
+  makerUserId  String
+  takerUserId  String
+  makerOrderId String
+  takerOrderId String
+  marketId     String
+  createdAt    DateTime @default(now())
+  makerUser    User     @relation("maker_user", fields: [makerUserId], references: [id])
+  takerUser    User     @relation("taker_user", fields: [takerUserId], references: [id])
+  makerOrder   Order    @relation("maker_order", fields: [makerOrderId], references: [id])
+  takerOrder   Order    @relation("taker_order", fields: [takerOrderId], references: [id])
+}
+
+enum Side {
+  Buy
+  Sell
+}
+
+enum OrderType {
+  Market
+  Limit
+}
+
+enum OrderStatus {
+  Open
+  Cancelled
+  Filled
+  PartiallyFilled
+}
