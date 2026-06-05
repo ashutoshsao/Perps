@@ -21,11 +21,12 @@
   },
   "dependencies": {
     "@repo/db": "workspace:*",
-    "@repo/types": "workspace:*",
     "@repo/redis": "workspace:*",
+    "@repo/types": "workspace:*",
     "argon2": "^0.44.0",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
+    "sorted-btree": "^2.1.0",
     "zod": "^4.4.3"
   },
   "module": "index.ts",

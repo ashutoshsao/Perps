@@ -1,11 +1,13 @@
 import { Router } from "express";
 import { verifyAuth } from "../helper/auth.middleware";
-import { addBalance } from "../controller/exchange.controller";
+import { addBalance, createMarket, createOrder } from "../controller/exchange.controller";
 
 export const exchangeRouter: Router = Router();
 
 exchangeRouter.post("/onramp", verifyAuth, addBalance);
 
-exchangeRouter.post("/order", verifyAuth, addBalance);
+exchangeRouter.post("/onramp", verifyAuth, createMarket);
+
+exchangeRouter.post("/order", verifyAuth, createOrder);
 
 exchangeRouter.post("/order:id", verifyAuth, addBalance); 

@@ -17,8 +17,22 @@ export type updateIndexPricePayload = {
   price: number
 }
 
+export type Market = {
+  maxLeverage: number,
+  minQty: number,
+  symbol: string
+}
+
+export type CreateMarketPayload = {
+  symbol: string,
+  minQty: number,
+  maxLeverage: number
+}
+
 export type RestingOrder = {
   userId: string,
+  orderId: string,
+  status: OrderStatus,
   qty: number,
   filledQty: number,
   margin: number,
@@ -36,7 +50,6 @@ export type Fill = {
   makerSide: Side,
   qty: number,
   price: number,
-  createdAt: number,
   symbol: string
 }
 
@@ -53,8 +66,6 @@ export type OrderRecord = {
   leverage: number,
   price: number,
   fills: Fill[]
-  createdAt: number,
-  updatedAt: number
 }
 
 export type Position = {
@@ -92,16 +103,16 @@ export type Orderbook = {
 export type createOrderPayload = {
   userId: string,
   symbol: string
-  orderType: OrderType,
-  side: "limit",
+  orderType: "limit",
+  side: Side,
   price: number,
   qty: number,
   leverage: number,
 } | {
   userId: string,
   symbol: string
-  orderType: OrderType,
-  side: "market",
+  orderType: "market",
+  side: Side,
   price: number,
   qty: number,
   leverage: number,
@@ -134,6 +145,8 @@ export type EnginePayload =
   | createOrderPayload
   | cancelOrderPayload
   | addBalancePayload
+  | CreateMarketPayload
+  | getBalancePayload;
 
 
 export interface EngineRequest {

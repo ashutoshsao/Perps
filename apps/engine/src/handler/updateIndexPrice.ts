@@ -1,5 +1,5 @@
-import { updateIndexPriceType } from "@repo/types";
+import { updateIndexPricePayload } from "@repo/types";
 
-export function updateIndexPrice(payload: updateIndexPriceType) {
+export function updateIndexPrice(payload: updateIndexPricePayload) {
 
 }
