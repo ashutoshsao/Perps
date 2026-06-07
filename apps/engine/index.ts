@@ -1,6 +1,5 @@
 import { getRedisClient } from "@repo/redis";
 import { EngineRequest, REDIS_KEYS, RedisResponseType } from "@repo/types";
-import { response } from "express";
 import { handleCommand } from "./src/controller/engine.controller";
 
 const client = getRedisClient();

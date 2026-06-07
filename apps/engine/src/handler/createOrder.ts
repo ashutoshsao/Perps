@@ -8,17 +8,15 @@ export function createOrder(payload: createOrderPayload) {
 
   let orderbook = ORDERBOOKS.get(symbol);
   if (!orderbook) throw new Error(`market ${symbol} doesn't exist`);
-
+  // correct — only check what we need
   if (orderType === "market") {
     if (side === "buy" && orderbook.asks.size === 0) throw new Error("no liquidity on asks")
-    if (side === "sell" && orderbook.bids.size === 0) throw new Error("no liquidity on bids");
+    if (side === "sell" && orderbook.bids.size === 0) throw new Error("no liquidity on bids")
   }
-
-  const limitPrice = orderType === "limit"
-    ? payload.price
-    : side === "buy"
-      ? Math.floor(orderbook.asks.minKey()! + (orderbook.asks.minKey()! * payload.slippageBps) / 10_000)
-      : Math.floor(orderbook.bids.maxKey()! - (orderbook.bids.maxKey()! * payload.slippageBps) / 10_000)
+  const limitPrice = orderType === "limit" ? payload.price :
+    side === "buy" ?
+      Math.floor(orderbook.asks.minKey()! * ((1 + payload.slippageBps) / 10000)) :
+      Math.floor(orderbook.bids.maxKey()! * ((1 - payload.slippageBps) / 10000))
 
   let margin = Math.floor(Number((BigInt(qty) * BigInt(limitPrice)) / BigInt(leverage)));
 
