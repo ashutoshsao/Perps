@@ -3,6 +3,8 @@ import BTree from "sorted-btree";
 type OrderType = "market" | "limit";
 type Side = "buy" | "sell";
 type OrderStatus = "open" | "filled" | "partially_filled" | "cancelled"
+type PositionSide = "long" | "short";
+
 export type EngineCommandType =
   | "create_order"
   | "cancel_order"
@@ -37,8 +39,6 @@ export type RestingOrder = {
   filledQty: number,
   margin: number,
   leverage: number,
-  createdAt: number,
-  updatedAt: number
 }
 
 export type Fill = {
@@ -70,19 +70,19 @@ export type OrderRecord = {
 
 export type Position = {
   userId: string,
+  positionSide: PositionSide,
+  liquidationPrice: number
   symbol: string,
   qty: number,
-  leverage: number,
   margin: number,
   averagePrice: number,
-  createdAt: number,
-  updatedAt: number
 }
+
 
 export type updatePositionPayload = {
   userId: string,
   symbol: string,
-  side: Side,
+  positionSide: PositionSide,
   fillQty: number,
   fillPrice: number,
   fillMargin: number,
