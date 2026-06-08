@@ -19,10 +19,14 @@ export type updateIndexPricePayload = {
   price: number
 }
 
+export type GetDepthPayload = {
+  symbol: string
+}
+
 export type Market = {
   maxLeverage: number,
   minQty: number,
-  symbol: string
+  symbol: string,
 }
 
 export type CreateMarketPayload = {
@@ -113,7 +117,6 @@ export type createOrderPayload = {
   symbol: string
   orderType: "market",
   side: Side,
-  price: number,
   qty: number,
   leverage: number,
   slippageBps: number

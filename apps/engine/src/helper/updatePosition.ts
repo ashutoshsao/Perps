@@ -1,6 +1,5 @@
 import { updatePositionPayload } from "@repo/types";
 import { POSITIONS } from "../engine-store";
-import { symbol } from "zod/v3";
 
 export function updatePosition(payload: updatePositionPayload) {
   let positions = POSITIONS.get(payload.userId)

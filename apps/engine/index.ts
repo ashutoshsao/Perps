@@ -2,11 +2,18 @@ import { getRedisClient } from "@repo/redis";
 import { EngineRequest, REDIS_KEYS, RedisResponseType } from "@repo/types";
 import { handleCommand } from "./src/controller/engine.controller";
 
-const client = getRedisClient();
+const GLOBAL_EVENTS = new Set([
+  "create_order",
+  "cancel_order",
+  "create_market"
+])
+
+const readClient = getRedisClient()
+const writeClient = getRedisClient()
 let lastSeenId = '$';
 async function startUp() {
-  let readRedis = await client;
-  let writeRedis = await client;
+  let readRedis = await readClient;
+  let writeRedis = await writeClient;
   while (true) {
     const streams = await readRedis.xRead([{
       key: REDIS_KEYS.engineCommands,
@@ -20,30 +27,41 @@ async function startUp() {
       for (const msg of stream.messages) {
         lastSeenId = msg.id;
         const { correlationId, type, responseQueue, payload } = msg.message
-        const request: EngineRequest = {
-          correlationId,
-          type: type as EngineRequest['type'],
-          responseQueue,
-          payload: JSON.parse(payload)
-        }
+        try {
 
-        const response = handleCommand(request);
-
-        if (!response) continue;// for update_index_price
-
-        await writeRedis.xAdd(response.responseQueue, '*', {
-          correlationId,
-          ok: response.ok ? "true" : "false",
-          error: response.error ?? '',
-          data: response.data ? JSON.stringify(response.data) : '',
-        })
-        //if not backendOnly so also put in 
-        if (response.globalEvent) {
-          await writeRedis.xAdd(REDIS_KEYS.engineEvents, '*', {
+          const request: EngineRequest = {
             correlationId,
-            ok: response.ok ? "true" : "false",
-            error: response.error ?? '',
-            data: response.data ? JSON.stringify(response.data) : ''
+            type: type as EngineRequest['type'],
+            responseQueue,
+            payload: JSON.parse(payload)
+          }
+
+          const response = handleCommand(request);
+
+          if (!response) continue;// for update_index_price
+
+          await writeRedis.xAdd(responseQueue, '*', {
+            correlationId,
+            ok: 'true',
+            error: '',
+            data: JSON.stringify(response),
+          })
+
+          if (GLOBAL_EVENTS.has(type)) {
+            await writeRedis.xAdd(REDIS_KEYS.engineEvents, '*', {
+              correlationId,
+              ok: 'true',
+              error: '',
+              data: JSON.stringify(response),
+            })
+          }
+        } catch (err) {
+          // business logic error — send back to backend, don't crash
+          await writeRedis.xAdd(responseQueue, '*', {
+            correlationId,
+            ok: 'false',
+            error: (err as Error).message,
+            data: '',
           })
         }
       }

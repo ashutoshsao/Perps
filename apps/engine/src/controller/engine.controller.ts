@@ -3,8 +3,9 @@ import { cancelOrder } from "../handler/cancelOrder";
 import { updateIndexPrice } from "../handler/updateIndexPrice"
 import { addBalance } from "../handler/addBalance";
 import { getBalance } from "../handler/getBalance";
-import { addBalancePayload, cancelOrderPayload, createMarketPayload, createOrderPayload, EngineRequest, getBalancePayload, updateIndexPricePayload } from "@repo/types";
+import { addBalancePayload, cancelOrderPayload, CreateMarketPayload, createOrderPayload, EngineRequest, getBalancePayload, GetDepthPayload, updateIndexPricePayload } from "@repo/types";
 import { createMarket } from "../handler/createMarket";
+import { getDepth } from "../handler/getDepth";
 
 export function handleCommand(request: EngineRequest) {
   const { type, payload } = request;
@@ -20,9 +21,9 @@ export function handleCommand(request: EngineRequest) {
     case "get_balance":
       return getBalance(payload as getBalancePayload);
     case "get_depth":
-      return getDepth(payload);
+      return getDepth(payload as GetDepthPayload);
     case "create_market":
-      return createMarket(payload as createMarketPayload);
+      return createMarket(payload as CreateMarketPayload);
     default: throw new Error("unknown command")
   }
 }

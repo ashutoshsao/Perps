@@ -64,7 +64,7 @@ export function createOrder(payload: createOrderPayload) {
 
     //update position of maker
     updatePosition({
-      userId: fill.takerOrderId,
+      userId: fill.takerUserId,
       symbol: order.symbol,
       positionSide: order.side === "buy" ? "long" : "short",
       fillQty: fill.qty,
@@ -73,15 +73,16 @@ export function createOrder(payload: createOrderPayload) {
       leverage: order.leverage,
     })
 
-    //makerOrder update and position update 
+    //makerOrder update and position update
     const makerOrder = ORDERS.get(fill.makerOrderId);
     if (!makerOrder) throw new Error("no maker order found");
     makerOrder.filledQty += fill.qty;
+    makerOrder.fills.push(fill);
 
     //update makerOrder's status
-    if (makerOrder.filledQty === makerOrder.qty) makerOrder.status = "filled";
-    else if (makerOrder.filledQty === 0) makerOrder.status = "open";
-    else makerOrder.status = "partially_filled";
+    if (makerOrder.filledQty === makerOrder.qty) makerOrder.status = "filled"
+    else if (makerOrder.filledQty > 0) makerOrder.status = "partially_filled"
+    else makerOrder.status = "open"
 
     //update position of maker
     updatePosition({
@@ -98,7 +99,7 @@ export function createOrder(payload: createOrderPayload) {
 
   //taker order status update
   if (order.filledQty === order.qty) order.status = "filled"
-  else if (order.filledQty < order.qty) order.status = "partially_filled"
+  else if (order.filledQty > 0) order.status = "partially_filled"
   else order.status = "open"
 
   //handle remaining qty

@@ -5,3 +5,4 @@ export const POSITIONS = new Map<string, Map<string, Position>>();
 export const BALANCES = new Map<string, Map<string, Balance>>();
 export const FILLS = new Map<string, Fill[]>();
 export const MARKETS = new Map<string, Market>();
+export const INDEX_PRICES = new Map<string, number>()
