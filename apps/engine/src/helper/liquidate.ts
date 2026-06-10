@@ -15,7 +15,7 @@ export function liquidatePosition(userId: string, position: Position) {
 
   if (order.fills.length === 0) {
     // no liquidity — ADL needed
-    adl(position.symbol, position.margin);
+    adl(position);
     return
   }
 }
