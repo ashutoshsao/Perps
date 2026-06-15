@@ -6,8 +6,6 @@ export const exchangeRouter: Router = Router();
 
 exchangeRouter.post("/onramp", verifyAuth, addBalance);
 
-exchangeRouter.post("/onramp", verifyAuth, createMarket);
+exchangeRouter.post("/market", verifyAuth, createMarket);
 
 exchangeRouter.post("/order", verifyAuth, createOrder);
-
-exchangeRouter.post("/order:id", verifyAuth, addBalance); 

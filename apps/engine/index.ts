@@ -10,7 +10,7 @@ const GLOBAL_EVENTS = new Set([
 
 const readClient = getRedisClient()
 const writeClient = getRedisClient()
-let lastSeenId = '$';
+let lastSeenId = '0-0';
 async function startUp() {
   let readRedis = await readClient;
   let writeRedis = await writeClient;
@@ -68,4 +68,7 @@ async function startUp() {
     }
   }
 }
-startUp().catch(() => process.exit(1));
+startUp().catch((err) => {
+  console.error("Engine crashed:", err);
+  process.exit(1);
+});

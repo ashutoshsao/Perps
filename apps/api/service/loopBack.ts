@@ -1,7 +1,8 @@
 import { getRedisClient } from "@repo/redis";
 import { EngineCommandType, EnginePayload, EngineResponse, REDIS_KEYS } from "@repo/types";
 
-const clientPromise = getRedisClient();
+const writeClientPromise = getRedisClient();
+const readClientPromise = getRedisClient();
 
 type PendingRequest = {
   resolve: (value: unknown) => void
@@ -18,7 +19,7 @@ export const loopback = async (type: EngineCommandType, payload: EnginePayload) 
   const correlationId = crypto.randomUUID();
 
   return new Promise(async (resolve, reject) => {
-    const redis = await clientPromise;
+    const redis = await writeClientPromise;
 
     const timeout = setTimeout(() => {
       loopbackResponses.delete(correlationId);
@@ -34,16 +35,17 @@ export const loopback = async (type: EngineCommandType, payload: EnginePayload) 
         responseQueue: REDIS_KEYS.responseQueue(responseBe),
         payload: JSON.stringify(payload),
       });
-    } catch {
+    } catch (err) {
       clearTimeout(timeout);
       loopbackResponses.delete(correlationId);
+      console.error("Failed to send command to engine:", err);
       reject(new Error("Failed to send to engine"));
     }
   })
 }
 
 async function waitForResponse() {
-  const redis = await clientPromise;
+  const redis = await readClientPromise;
 
   while (true) {
     const streams = await redis.xRead([
@@ -81,4 +83,7 @@ async function waitForResponse() {
   }
 }
 
-waitForResponse().catch(() => process.exit(1));
+waitForResponse().catch((err) => {
+  console.error("Loopback response listener crashed:", err);
+  process.exit(1);
+});
