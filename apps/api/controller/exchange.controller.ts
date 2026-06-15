@@ -1,8 +1,9 @@
 import { AddBalanceApiSchema, CreateMarketApiSchema, CreateOrderApiSchema } from "@repo/types";
-import { response, type Request, type Response } from "express";
+import { type Request, type Response } from "express";
 import { loopback } from "../service/loopBack";
 import { prisma } from "@repo/db";
 import { Env } from "../utils/config";
+
 export const addBalance = async (req: Request, res: Response) => {
   const userId = req.userId!;
   const parsed = AddBalanceApiSchema.safeParse(req.body);
