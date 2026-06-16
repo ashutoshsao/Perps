@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { verifyAuth } from "../helper/auth.middleware";
-import { addBalance, createMarket, createOrder } from "../controller/exchange.controller";
+import { addBalance, cancelOrder, createMarket, createOrder } from "../controller/exchange.controller";
 
 export const exchangeRouter: Router = Router();
 
@@ -9,3 +9,5 @@ exchangeRouter.post("/onramp", verifyAuth, addBalance);
 exchangeRouter.post("/market", verifyAuth, createMarket);
 
 exchangeRouter.post("/order", verifyAuth, createOrder);
+
+exchangeRouter.post("/order/:id", verifyAuth, cancelOrder);

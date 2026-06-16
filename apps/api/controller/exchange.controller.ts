@@ -1,4 +1,4 @@
-import { AddBalanceApiSchema, CreateMarketApiSchema, CreateOrderApiSchema } from "@repo/types";
+import { AddBalanceApiSchema, CancelOrderApiSchema, CreateMarketApiSchema, CreateOrderApiSchema } from "@repo/types";
 import { type Request, type Response } from "express";
 import { loopback } from "../service/loopBack";
 import { prisma } from "@repo/db";
@@ -89,6 +89,22 @@ export const createOrder = async (req: Request, res: Response) => {
   const response = await loopback("create_order", {
     userId,
     ...parsed.data
+  });
+
+  res.status(200).json(response);
+}
+
+export const cancelOrder = async (req: Request, res: Response) => {
+  const userId = req.userId!;
+  const parsed = CancelOrderApiSchema.safeParse(req.params.id);
+  if (!parsed.success) {
+    res.status(400).json({ message: "Invalid input" })
+    return;
+  };
+  const orderId = parsed.data;
+  const response = await loopback("cancel_order", {
+    userId,
+    orderId
   });
 
   res.status(200).json(response);

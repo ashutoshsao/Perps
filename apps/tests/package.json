@@ -1,0 +1,29 @@
+{
+  "name": "@repo/tests",
+  "version": "0.0.0",
+  "license": "MIT",
+  "scripts": {
+    "lint": "eslint \"**/*.ts\"",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "*",
+    "@repo/typescript-config": "*",
+    "@types/bun": "latest",
+    "@types/express": "^5.0.6",
+    "eslint": "^8.57.0",
+    "typescript": "5.5.4"
+  },
+  "dependencies": {
+    "@repo/db": "workspace:*",
+    "@repo/redis": "workspace:*",
+    "@repo/types": "workspace:*",
+    "argon2": "^0.44.0",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "sorted-btree": "^2.1.0",
+    "zod": "^4.4.3"
+  },
+  "type": "module",
+  "private": true
+}

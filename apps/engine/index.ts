@@ -40,14 +40,8 @@ async function startUp() {
 
           if (!response) continue;// for update_index_price
 
-          await writeRedis.xAdd(responseQueue, '*', {
-            correlationId,
-            ok: 'true',
-            error: '',
-            data: JSON.stringify(response),
-          })
-
           if (GLOBAL_EVENTS.has(type)) {
+            // create_order, cancel_order, create_market,
             await writeRedis.xAdd(REDIS_KEYS.engineEvents, '*', {
               correlationId,
               ok: 'true',
@@ -55,8 +49,16 @@ async function startUp() {
               data: JSON.stringify(response),
             })
           }
-        } catch (err) {
-          // business logic error — send back to backend, don't crash
+          else {
+            await writeRedis.xAdd(responseQueue, '*', {
+              correlationId,
+              ok: 'true',
+              error: '',
+              data: JSON.stringify(response),
+            })
+          }
+        }
+        catch (err) {
           await writeRedis.xAdd(responseQueue, '*', {
             correlationId,
             ok: 'false',

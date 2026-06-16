@@ -21,7 +21,7 @@ export const CreateOrderApiSchema = z.discriminatedUnion("orderType", [
     price: int,
     qty: int,
     leverage: int.min(1),
-    marketId: z.uuid(),
+    symbol: z.string().min(1),
   }),
   z.object({
     orderType: z.literal("market"),
@@ -29,10 +29,11 @@ export const CreateOrderApiSchema = z.discriminatedUnion("orderType", [
     qty: int,
     leverage: int.min(1),
     slippageBps: int.min(0),
-    marketId: z.uuid(),
+    symbol: z.string().min(1),
   }),
 ])
 
+export const CancelOrderApiSchema = z.string();
 
 export const CreateMarketApiSchema = z.object({
   symbol: z.string().min(1),

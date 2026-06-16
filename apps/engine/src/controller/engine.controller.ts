@@ -14,6 +14,8 @@ export function handleCommand(request: EngineRequest) {
       return createOrder(payload as createOrderPayload);
     case "cancel_order":
       return cancelOrder(payload as cancelOrderPayload);
+    case "create_market":
+      return createMarket(payload as CreateMarketPayload);
     case "update_index_price":
       return updateIndexPrice(payload as updateIndexPricePayload);
     case "add_balance":
@@ -22,8 +24,6 @@ export function handleCommand(request: EngineRequest) {
       return getBalance(payload as getBalancePayload);
     case "get_depth":
       return getDepth(payload as GetDepthPayload);
-    case "create_market":
-      return createMarket(payload as CreateMarketPayload);
     default: throw new Error("unknown command")
   }
 }
