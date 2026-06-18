@@ -6,7 +6,7 @@ import BTree from "sorted-btree";
 const SNAPSHOT_DIR = "../../data/snapshots";
 const MAX_SNAPSHOTS = 10;
 
-export async function snapshot(lastSeenStreamId: string) {
+export async function saveSnapshot(lastSeenStreamId: string) {
   await fs.mkdir(SNAPSHOT_DIR, { recursive: true });
 
   let serializedPositions: Record<string, Record<string, Position>> = {};
@@ -105,41 +105,51 @@ export async function loadSnapshot(): Promise<string> {
     }
 
     //positions
-    for (const [userId, innerObj] of Object.entries(state.positions)) {
+    const positions = state.positions as Record<string, Record<string, Position>>;
+    for (const [userId, innerObj] of Object.entries(positions)) {
       let innetMap = new Map<string, Position>();
-      for (const [symbol, pos] of Object.entries(innerObj as Record<string, Position>)) {
+      for (const [symbol, pos] of Object.entries(innerObj)) {
         innetMap.set(symbol, pos);
       }
       POSITIONS.set(userId, innetMap);
     }
 
     //balances
-    for (const [userId, innerObj] of Object.entries(state.balances)) {
+    const balances = state.balances as Record<string, Record<string, Balance>>;
+    for (const [userId, innerObj] of Object.entries(balances)) {
       let innetMap = new Map<string, Balance>();
-      for (const [symbol, bal] of Object.entries(innerObj as Record<string, Balance>)) {
+      for (const [symbol, bal] of Object.entries(innerObj)) {
         innetMap.set(symbol, bal);
       }
       BALANCES.set(userId, innetMap);
     }
 
     //orderbooks
-    for (const [symbol, ob] of Object.entries(state.orderbooks)) {
+    type SerializedOrderbooks = {
+      asks: [number, RestingOrder[]][];
+      bids: [number, RestingOrder[]][];
+      lastTradedPrice: number;
+    }
+    const orderbooks = state.orderbooks as Record<string, SerializedOrderbooks>;
+    for (const [symbol, saved] of Object.entries(orderbooks)) {
       const asks = new BTree<number, RestingOrder[]>();
       const bids = new BTree<number, RestingOrder[]>();
-      const saved = ob as {
-        asks: [number, RestingOrder[]][],
-        bids: [number, RestingOrder[]][],
-        lastTradedPrice: number
-      }
+
       for (const [price, orders] of saved.asks) {
         asks.set(price, orders);
       }
+
       for (const [price, orders] of saved.bids) {
         bids.set(price, orders);
       }
 
-      ORDERBOOKS.set(symbol, { asks, bids, lastTradedPrice: saved.lastTradedPrice });
+      ORDERBOOKS.set(symbol, {
+        asks,
+        bids,
+        lastTradedPrice: saved.lastTradedPrice
+      })
     }
+
 
     return lastSeenStreamId;
   } catch (error) {

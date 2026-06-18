@@ -1,17 +1,19 @@
 import { getRedisClient } from "@repo/redis";
 import { EngineRequest, REDIS_KEYS, RedisResponseType } from "@repo/types";
 import { handleCommand } from "./src/controller/engine.controller";
+import { loadSnapshot } from "./src/helper/snapshot";
 
 const GLOBAL_EVENTS = new Set([
   "create_order",
   "cancel_order",
   "create_market"
 ])
-
+let lastSeenId;
 const readClient = getRedisClient()
 const writeClient = getRedisClient()
-let lastSeenId = '0-0';
 async function startUp() {
+  //loadSnapshot
+  lastSeenId = await loadSnapshot();
   let readRedis = await readClient;
   let writeRedis = await writeClient;
   while (true) {
@@ -43,14 +45,15 @@ async function startUp() {
           if (GLOBAL_EVENTS.has(type)) {
             // create_order, cancel_order, create_market,
             await writeRedis.xAdd(REDIS_KEYS.engineEvents, '*', {
+              type,
               correlationId,
               ok: 'true',
               error: '',
               data: JSON.stringify(response),
             })
-          }
-          else {
+          } else {
             await writeRedis.xAdd(responseQueue, '*', {
+              type,
               correlationId,
               ok: 'true',
               error: '',
@@ -60,6 +63,7 @@ async function startUp() {
         }
         catch (err) {
           await writeRedis.xAdd(responseQueue, '*', {
+            type,
             correlationId,
             ok: 'false',
             error: (err as Error).message,

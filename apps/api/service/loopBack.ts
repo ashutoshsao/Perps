@@ -65,18 +65,19 @@ async function waitForResponse() {
 
         const raw = msg.message;
         const engineResponse: EngineResponse = {
+          type: raw.type as EngineCommandType,
           correlationId: raw.correlationId,
           ok: raw.ok === "true",
           data: raw.data ? JSON.parse(raw.data) : undefined,
-          error: raw.error
+          error: raw.error || undefined
         }
         const pending = loopbackResponses.get(engineResponse.correlationId);
         if (!pending) continue;
 
         clearTimeout(pending.timeout);
-        !engineResponse.ok
-          ? pending.reject(new Error(engineResponse.error))
-          : pending.resolve(engineResponse.data);
+        engineResponse.ok
+          ? pending.resolve(engineResponse.data)
+          : pending.reject(new Error(engineResponse.error ?? "EngineError"));
         loopbackResponses.delete(engineResponse.correlationId);
       }
     }

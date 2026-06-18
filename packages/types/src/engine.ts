@@ -132,6 +132,7 @@ export type cancelOrderPayload = {
 }
 
 export interface EngineResponse {
+  type: EngineCommandType
   correlationId: string
   ok: boolean
   data?: unknown
