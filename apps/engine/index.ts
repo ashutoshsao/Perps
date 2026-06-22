@@ -1,14 +1,18 @@
 import { getRedisClient } from "@repo/redis";
 import { EngineRequest, REDIS_KEYS, RedisResponseType } from "@repo/types";
 import { handleCommand } from "./src/controller/engine.controller";
-import { loadSnapshot } from "./src/helper/snapshot";
+import { loadSnapshot, saveSnapshot } from "./src/helper/snapshot";
 
 const GLOBAL_EVENTS = new Set([
   "create_order",
   "cancel_order",
   "create_market"
 ])
-let lastSeenId;
+
+let lastSeenId: string
+let lastSnapshotTime = Date.now()
+const SNAPSHOT_INTERVAL = 5 * 60 * 1000
+
 const readClient = getRedisClient()
 const writeClient = getRedisClient()
 async function startUp() {
@@ -30,7 +34,6 @@ async function startUp() {
         lastSeenId = msg.id;
         const { correlationId, type, responseQueue, payload } = msg.message
         try {
-
           const request: EngineRequest = {
             correlationId,
             type: type as EngineRequest['type'],
@@ -78,3 +81,7 @@ startUp().catch((err) => {
   console.error("Engine crashed:", err);
   process.exit(1);
 });
+
+if (Date.now() - lastSnapshotTime > SNAPSHOT_INTERVAL) {
+  await saveSnapshot(lastSeenId)
+}

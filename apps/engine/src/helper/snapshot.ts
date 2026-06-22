@@ -153,7 +153,7 @@ export async function loadSnapshot(): Promise<string> {
 
     return lastSeenStreamId;
   } catch (error) {
-    console.log(`Error while saving snapshot ${(error as Error).message}`);
+    console.log(`Error while loading snapshot ${(error as Error).message}`);
     return '0-0';
   }
 }
