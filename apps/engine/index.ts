@@ -113,6 +113,7 @@ function scheduleFundingRate(writeRedis: RedisClient) {
       responseQueueL: '',
       payload: JSON.stringify({})
     })
+    scheduleFundingRate(writeRedis);
   }, msUntilNextFunding())
 }
 

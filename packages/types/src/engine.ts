@@ -13,6 +13,7 @@ export type EngineCommandType =
   | "get_depth"
   | "update_index_price"
   | "create_market"
+  | "funding_rate"
 
 export type updateIndexPricePayload = {
   symbol: string,
