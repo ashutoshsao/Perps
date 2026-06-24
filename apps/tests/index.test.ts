@@ -1,4 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import type { EngineCommandType, EngineRequest } from "@repo/types";
+import { handleCommand } from "../engine/src/controller/engine.controller";
+import { BALANCES, FILLS, INDEX_PRICES, MARKETS, ORDERBOOKS, ORDERS, POSITIONS } from "../engine/src/engine-store";
 
 const WORKSPACE_ROOT = `${import.meta.dir}/../..`;
 const PORT = Number(process.env.TEST_API_PORT ?? "4210");
@@ -12,6 +15,25 @@ let username = "";
 let password = "";
 let authToken = "";
 let marketSymbol = "";
+
+function engineCommand(type: EngineCommandType, payload: unknown = {}) {
+  return handleCommand({
+    correlationId: crypto.randomUUID(),
+    responseQueue: "test-response-queue",
+    type,
+    payload: payload as EngineRequest["payload"],
+  }) as any;
+}
+
+function resetEngineStore() {
+  BALANCES.clear();
+  FILLS.clear();
+  INDEX_PRICES.clear();
+  MARKETS.clear();
+  ORDERBOOKS.clear();
+  ORDERS.clear();
+  POSITIONS.clear();
+}
 
 async function loadEnvFile(path: string) {
   const file = Bun.file(path);
@@ -126,114 +148,315 @@ async function waitForApi() {
   throw new Error(`API did not become ready: ${String(lastError)}\n${processLogs.join("")}`);
 }
 
-beforeAll(async () => {
-  await loadAppEnv();
-
-  const missing = requiredEnv.filter((key) => !process.env[key]);
-  if (missing.length > 0) {
-    throw new Error(`Missing test environment variables: ${missing.join(", ")}`);
-  }
-
-  startProcess("engine", ["bun", "apps/engine/index.ts"]);
-  startProcess("api", ["bun", "apps/api/index.ts"]);
-  await waitForApi();
-}, 20_000);
-
-afterAll(() => {
-  for (const process of processes) process.kill();
+beforeEach(() => {
+  resetEngineStore();
 });
 
-describe("auth endpoints", () => {
-  it("rejects signup without a username", async () => {
-    const { response } = await post("/signup", { password: "password-123" });
-    expect(response.status).toBe(400);
+describe("api integration", () => {
+  beforeAll(async () => {
+    await loadAppEnv();
+
+    const missing = requiredEnv.filter((key) => !process.env[key]);
+    if (missing.length > 0) {
+      throw new Error(`Missing test environment variables: ${missing.join(", ")}`);
+    }
+
+    startProcess("engine", ["bun", "apps/engine/index.ts"]);
+    startProcess("api", ["bun", "apps/api/index.ts"]);
+    await waitForApi();
+  }, 20_000);
+
+  afterAll(() => {
+    for (const process of processes) process.kill();
   });
 
-  it("signs up a user", async () => {
-    username = `test-${crypto.randomUUID()}@example.com`;
-    password = "password-123";
-
-    const { response, json } = await post("/signup", {
-      name: "Test User",
-      username,
-      password,
+  describe("auth endpoints", () => {
+    it("rejects signup without a username", async () => {
+      const { response } = await post("/signup", { password: "password-123" });
+      expect(response.status).toBe(400);
     });
 
-    expect(response.status).toBe(201);
-    expect(json.token).toBeString();
-  });
+    it("signs up a user", async () => {
+      username = `test-${crypto.randomUUID()}@example.com`;
+      password = "password-123";
 
-  it("rejects signin without a username", async () => {
-    const { response } = await post("/signin", { password });
-    expect(response.status).toBe(400);
-  });
+      const { response, json } = await post("/signup", {
+        name: "Test User",
+        username,
+        password,
+      });
 
-  it("rejects incorrect credentials", async () => {
-    const { response } = await post("/signin", {
-      username,
-      password: "incorrect-password",
+      expect(response.status).toBe(201);
+      expect(json.token).toBeString();
     });
-    expect(response.status).toBe(401);
+
+    it("rejects signin without a username", async () => {
+      const { response } = await post("/signin", { password });
+      expect(response.status).toBe(400);
+    });
+
+    it("rejects incorrect credentials", async () => {
+      const { response } = await post("/signin", {
+        username,
+        password: "incorrect-password",
+      });
+      expect(response.status).toBe(401);
+    });
+
+    it("signs in with valid credentials", async () => {
+      const { response, json } = await post("/signin", { username, password });
+
+      expect(response.status).toBe(200);
+      expect(json.token).toBeString();
+      authToken = json.token;
+    });
   });
 
-  it("signs in with valid credentials", async () => {
-    const { response, json } = await post("/signin", { username, password });
+  describe("order endpoints", () => {
+    it("creates a market", async () => {
+      marketSymbol = `TEST-${crypto.randomUUID().slice(0, 8).toUpperCase()}-USD`;
+      const { response, json } = await post(
+        "/market",
+        {
+          symbol: marketSymbol,
+          imageUrl: "https://example.com/market.png",
+          maxLeverage: 10,
+          minQty: 1,
+        },
+        {
+          authorization: `Bearer ${authToken}`,
+          token: process.env.ADMIN_SECRET ?? "test-admin-secret",
+        },
+      );
 
-    expect(response.status).toBe(200);
-    expect(json.token).toBeString();
-    authToken = json.token;
+      expect(response.status).toBe(201);
+      expect(json.marketId).toBeString();
+    });
+
+    it("adds balance", async () => {
+      const { response, json } = await post(
+        "/onramp",
+        { amount: 100_000 },
+        { authorization: `Bearer ${authToken}` },
+      );
+
+      expect(response.status).toBe(200);
+      expect(json.response.available).toBeGreaterThanOrEqual(100_000);
+    });
+
+    it("places an unmatched limit order", async () => {
+      const { response, json } = await post(
+        "/order",
+        {
+          orderType: "limit",
+          side: "buy",
+          price: 100,
+          qty: 10,
+          leverage: 1,
+          symbol: marketSymbol,
+        },
+        { authorization: `Bearer ${authToken}` },
+      );
+
+      expect(response.status).toBe(200);
+      expect(json.orderId).toBeString();
+      expect(json.filledQty).toBe(0);
+      expect(json.status).toBe("open");
+    });
   });
 });
 
-describe("order endpoints", () => {
-  it("creates a market", async () => {
-    marketSymbol = `TEST-${crypto.randomUUID().slice(0, 8).toUpperCase()}-USD`;
-    const { response, json } = await post(
-      "/market",
+describe("engine commands", () => {
+  it("adds and fetches balances through the command dispatcher", () => {
+    expect(
+      engineCommand("add_balance", {
+        userId: "balance-user",
+        amount: 1_000,
+      }),
+    ).toEqual({ available: 1_000, locked: 0 });
+    expect(
+      engineCommand("add_balance", {
+        userId: "balance-user",
+        amount: 250,
+      }),
+    ).toEqual({ available: 1_250, locked: 0 });
+    const fetchedBalance = engineCommand("get_balance", {
+      userId: "balance-user",
+    });
+    expect(fetchedBalance).toEqual({ available: 1_250, locked: 0 });
+  });
+
+  it("creates a market and returns sorted depth for resting limit orders", () => {
+    engineCommand("create_market", {
+      symbol: "DEPTH-USD",
+      maxLeverage: 5,
+      minQty: 1,
+    });
+    expect(engineCommand("get_markets")).toEqual([
       {
-        symbol: marketSymbol,
-        imageUrl: "https://example.com/market.png",
-        maxLeverage: 10,
+        symbol: "DEPTH-USD",
+        maxLeverage: 5,
         minQty: 1,
       },
-      {
-        authorization: `Bearer ${authToken}`,
-        token: process.env.ADMIN_SECRET ?? "test-admin-secret",
-      },
-    );
+    ]);
+    engineCommand("add_balance", { userId: "maker-a", amount: 10_000 });
+    engineCommand("add_balance", { userId: "maker-b", amount: 10_000 });
 
-    expect(response.status).toBe(201);
-    expect(json.marketId).toBeString();
+    engineCommand("create_order", {
+      userId: "maker-a",
+      symbol: "DEPTH-USD",
+      orderType: "limit",
+      side: "sell",
+      price: 110,
+      qty: 3,
+      leverage: 1,
+    });
+    engineCommand("create_order", {
+      userId: "maker-a",
+      symbol: "DEPTH-USD",
+      orderType: "limit",
+      side: "sell",
+      price: 100,
+      qty: 2,
+      leverage: 1,
+    });
+    engineCommand("create_order", {
+      userId: "maker-b",
+      symbol: "DEPTH-USD",
+      orderType: "limit",
+      side: "buy",
+      price: 90,
+      qty: 4,
+      leverage: 1,
+    });
+    engineCommand("create_order", {
+      userId: "maker-b",
+      symbol: "DEPTH-USD",
+      orderType: "limit",
+      side: "buy",
+      price: 95,
+      qty: 1,
+      leverage: 1,
+    });
+
+    expect(engineCommand("get_depth", { symbol: "DEPTH-USD" })).toEqual({
+      symbol: "DEPTH-USD",
+      asks: [
+        [100, 2],
+        [110, 3],
+      ],
+      bids: [
+        [95, 1],
+        [90, 4],
+      ],
+    });
   });
 
-  it("adds balance", async () => {
-    const { response, json } = await post(
-      "/onramp",
-      { amount: 100_000 },
-      { authorization: `Bearer ${authToken}` },
-    );
+  it("matches a market buy against the best ask and updates both positions", () => {
+    engineCommand("create_market", {
+      symbol: "MATCH-USD",
+      maxLeverage: 10,
+      minQty: 1,
+    });
+    engineCommand("add_balance", { userId: "seller", amount: 10_000 });
+    engineCommand("add_balance", { userId: "buyer", amount: 10_000 });
 
-    expect(response.status).toBe(200);
-    expect(json.response.available).toBeGreaterThanOrEqual(100_000);
+    const makerOrder = engineCommand("create_order", {
+      userId: "seller",
+      symbol: "MATCH-USD",
+      orderType: "limit",
+      side: "sell",
+      price: 100,
+      qty: 10,
+      leverage: 1,
+    });
+    const takerOrder = engineCommand("create_order", {
+      userId: "buyer",
+      symbol: "MATCH-USD",
+      orderType: "market",
+      side: "buy",
+      qty: 4,
+      leverage: 1,
+      slippageBps: 10_000,
+    });
+
+    expect(takerOrder.status).toBe("filled");
+    expect(takerOrder.filledQty).toBe(4);
+    expect(takerOrder.fills).toHaveLength(1);
+    expect(takerOrder.fills[0]).toMatchObject({
+      makerOrderId: makerOrder.orderId,
+      makerUserId: "seller",
+      takerUserId: "buyer",
+      makerSide: "sell",
+      qty: 4,
+      price: 100,
+      symbol: "MATCH-USD",
+    });
+    expect(ORDERS.get(makerOrder.orderId)?.status).toBe("partially_filled");
+    expect(ORDERS.get(makerOrder.orderId)?.filledQty).toBe(4);
+    expect(POSITIONS.get("buyer")?.get("MATCH-USD")).toMatchObject({
+      positionSide: "long",
+      qty: 4,
+      averagePrice: 100,
+    });
+    expect(POSITIONS.get("seller")?.get("MATCH-USD")).toMatchObject({
+      positionSide: "short",
+      qty: 4,
+      averagePrice: 100,
+    });
+    expect(engineCommand("get_depth", { symbol: "MATCH-USD" }).asks).toEqual([[100, 6]]);
   });
 
-  it("places an unmatched limit order", async () => {
-    const { response, json } = await post(
-      "/order",
-      {
-        orderType: "limit",
-        side: "buy",
-        price: 100,
-        qty: 10,
-        leverage: 1,
-        symbol: marketSymbol,
-      },
-      { authorization: `Bearer ${authToken}` },
-    );
+  it("cancels a resting order and refunds locked margin", () => {
+    engineCommand("create_market", {
+      symbol: "CANCEL-USD",
+      maxLeverage: 5,
+      minQty: 1,
+    });
+    engineCommand("add_balance", { userId: "canceller", amount: 1_000 });
 
-    expect(response.status).toBe(200);
-    expect(json.orderId).toBeString();
-    expect(json.filledQty).toBe(0);
-    expect(json.status).toBe("open");
+    const order = engineCommand("create_order", {
+      userId: "canceller",
+      symbol: "CANCEL-USD",
+      orderType: "limit",
+      side: "buy",
+      price: 50,
+      qty: 4,
+      leverage: 1,
+    });
+    expect(engineCommand("get_balance", { userId: "canceller" })).toEqual({
+      available: 800,
+      locked: 200,
+    });
+
+    const cancelledOrder = engineCommand("cancel_order", {
+      userId: "canceller",
+      orderId: order.orderId,
+    });
+
+    expect(cancelledOrder.status).toBe("cancelled");
+    expect(engineCommand("get_balance", { userId: "canceller" })).toEqual({
+      available: 1_000,
+      locked: 0,
+    });
+    expect(engineCommand("get_depth", { symbol: "CANCEL-USD" }).bids).toEqual([]);
+  });
+
+  it("updates index prices without a response and rejects unknown commands", () => {
+    const response = engineCommand("update_index_price", {
+      symbol: "INDEX-USD",
+      price: 123,
+    });
+
+    expect(response).toBeUndefined();
+    expect(INDEX_PRICES.get("INDEX-USD")).toBe(123);
+    expect(() =>
+      handleCommand({
+        correlationId: crypto.randomUUID(),
+        responseQueue: "test-response-queue",
+        type: "does_not_exist" as EngineCommandType,
+        payload: {} as EngineRequest["payload"],
+      }),
+    ).toThrow("unknown command");
   });
 });
