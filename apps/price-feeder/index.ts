@@ -8,8 +8,6 @@ const readRedis = getRedisClient();
 const writeRedis = getRedisClient();
 const ws = new WebSocket("wss://fstream.binance.com/market/ws");
 
-export const subscribedMarkets = new Set<string>();
-
 ws.on("open", async () => {
   watchNewMarkets()  // start watching FIRST — don't miss any create_market events
   const markets = await loopback() as string[]  // then get existing markets
@@ -24,7 +22,7 @@ ws.on("message", async (data) => {
   await client.xAdd(REDIS_KEYS.engineCommands, '*', {
     type: "update_index_price",
     correlationId: crypto.randomUUID(),
-    ResponseQueue: '',
+    responseQueue: '',
     payload: JSON.stringify({
       symbol: msg.s.replace("USDT", ''),// "SOLUSDT" => "SOL",
       price: Math.floor(parseFloat(msg.i))
@@ -55,5 +53,3 @@ async function watchNewMarkets() {
     }
   }
 }
-
-watchNewMarkets().catch(() => process.exit(1))

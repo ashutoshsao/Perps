@@ -1,5 +1,7 @@
 import { WebSocket } from "ws";
-import { subscribedMarkets } from "../..";
+
+export const subscribedMarkets = new Set<string>();
+
 let subscribeId = 1
 export function newMarket(ws: WebSocket, symbol: string) {
   if (subscribedMarkets.has(symbol)) return;

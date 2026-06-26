@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test"
 import type { EngineCommandType, EngineRequest } from "@repo/types";
 import { handleCommand } from "../engine/src/controller/engine.controller";
 import { BALANCES, FILLS, INDEX_PRICES, MARKETS, ORDERBOOKS, ORDERS, POSITIONS } from "../engine/src/engine-store";
+import { newMarket, subscribedMarkets } from "../price-feeder/src/helper/newMarket";
 
 const WORKSPACE_ROOT = `${import.meta.dir}/../..`;
 const PORT = Number(process.env.TEST_API_PORT ?? "4210");
@@ -292,13 +293,7 @@ describe("engine commands", () => {
       maxLeverage: 5,
       minQty: 1,
     });
-    expect(engineCommand("get_markets")).toEqual([
-      {
-        symbol: "DEPTH-USD",
-        maxLeverage: 5,
-        minQty: 1,
-      },
-    ]);
+    expect(engineCommand("get_markets")).toEqual(["DEPTH-USD"]);
     engineCommand("add_balance", { userId: "maker-a", amount: 10_000 });
     engineCommand("add_balance", { userId: "maker-b", amount: 10_000 });
 
@@ -407,6 +402,131 @@ describe("engine commands", () => {
     expect(engineCommand("get_depth", { symbol: "MATCH-USD" }).asks).toEqual([[100, 6]]);
   });
 
+  it("rejects orders that violate market limits or have no market liquidity", () => {
+    engineCommand("create_market", {
+      symbol: "VALIDATION-USD",
+      maxLeverage: 3,
+      minQty: 5,
+    });
+    engineCommand("add_balance", { userId: "validator", amount: 10_000 });
+
+    expect(() =>
+      engineCommand("create_order", {
+        userId: "validator",
+        symbol: "VALIDATION-USD",
+        orderType: "limit",
+        side: "buy",
+        price: 100,
+        qty: 5,
+        leverage: 4,
+      }),
+    ).toThrow("maximum leverage allowed for VALIDATION-USD is 3");
+
+    expect(() =>
+      engineCommand("create_order", {
+        userId: "validator",
+        symbol: "VALIDATION-USD",
+        orderType: "limit",
+        side: "buy",
+        price: 100,
+        qty: 4,
+        leverage: 1,
+      }),
+    ).toThrow("min qty is 5");
+
+    expect(() =>
+      engineCommand("create_order", {
+        userId: "validator",
+        symbol: "VALIDATION-USD",
+        orderType: "market",
+        side: "buy",
+        qty: 5,
+        leverage: 1,
+        slippageBps: 10_000,
+      }),
+    ).toThrow("no liquidity on asks");
+  });
+
+  it("partially fills a market order and refunds margin for unfilled quantity", () => {
+    engineCommand("create_market", {
+      symbol: "PARTIAL-MARKET-USD",
+      maxLeverage: 10,
+      minQty: 1,
+    });
+    engineCommand("add_balance", { userId: "maker", amount: 10_000 });
+    engineCommand("add_balance", { userId: "taker", amount: 1_000 });
+
+    const makerOrder = engineCommand("create_order", {
+      userId: "maker",
+      symbol: "PARTIAL-MARKET-USD",
+      orderType: "limit",
+      side: "sell",
+      price: 100,
+      qty: 3,
+      leverage: 1,
+    });
+    const takerOrder = engineCommand("create_order", {
+      userId: "taker",
+      symbol: "PARTIAL-MARKET-USD",
+      orderType: "market",
+      side: "buy",
+      qty: 5,
+      leverage: 1,
+      slippageBps: 10_000,
+    });
+
+    expect(takerOrder.status).toBe("partially_filled");
+    expect(takerOrder.filledQty).toBe(3);
+    expect(takerOrder.fills).toHaveLength(1);
+    expect(ORDERS.get(makerOrder.orderId)?.status).toBe("filled");
+    expect(engineCommand("get_depth", { symbol: "PARTIAL-MARKET-USD" }).asks).toEqual([]);
+    expect(engineCommand("get_balance", { userId: "taker" })).toEqual({
+      available: 700,
+      locked: 300,
+    });
+  });
+
+  it("keeps unfilled limit quantity resting and refunds price improvement", () => {
+    engineCommand("create_market", {
+      symbol: "PRICE-IMPROVEMENT-USD",
+      maxLeverage: 10,
+      minQty: 1,
+    });
+    engineCommand("add_balance", { userId: "seller", amount: 10_000 });
+    engineCommand("add_balance", { userId: "buyer", amount: 1_000 });
+
+    engineCommand("create_order", {
+      userId: "seller",
+      symbol: "PRICE-IMPROVEMENT-USD",
+      orderType: "limit",
+      side: "sell",
+      price: 100,
+      qty: 2,
+      leverage: 1,
+    });
+    const buyerOrder = engineCommand("create_order", {
+      userId: "buyer",
+      symbol: "PRICE-IMPROVEMENT-USD",
+      orderType: "limit",
+      side: "buy",
+      price: 110,
+      qty: 5,
+      leverage: 1,
+    });
+
+    expect(buyerOrder.status).toBe("partially_filled");
+    expect(buyerOrder.filledQty).toBe(2);
+    expect(engineCommand("get_depth", { symbol: "PRICE-IMPROVEMENT-USD" })).toEqual({
+      symbol: "PRICE-IMPROVEMENT-USD",
+      asks: [],
+      bids: [[110, 3]],
+    });
+    expect(engineCommand("get_balance", { userId: "buyer" })).toEqual({
+      available: 470,
+      locked: 530,
+    });
+  });
+
   it("cancels a resting order and refunds locked margin", () => {
     engineCommand("create_market", {
       symbol: "CANCEL-USD",
@@ -458,5 +578,38 @@ describe("engine commands", () => {
         payload: {} as EngineRequest["payload"],
       }),
     ).toThrow("unknown command");
+  });
+});
+
+describe("price feeder", () => {
+  beforeEach(() => {
+    subscribedMarkets.clear();
+  });
+
+  it("subscribes to a Binance mark-price stream once per market", () => {
+    const sentMessages: string[] = [];
+    const ws = {
+      send(message: string) {
+        sentMessages.push(message);
+      },
+    };
+
+    newMarket(ws as any, "BTC");
+    newMarket(ws as any, "BTC");
+    newMarket(ws as any, "SOL");
+
+    expect(sentMessages.map((message) => JSON.parse(message))).toEqual([
+      {
+        method: "SUBSCRIBE",
+        params: ["btcusdt@markPrice@1s"],
+        id: 1,
+      },
+      {
+        method: "SUBSCRIBE",
+        params: ["solusdt@markPrice@1s"],
+        id: 2,
+      },
+    ]);
+    expect(subscribedMarkets).toEqual(new Set(["BTC", "SOL"]));
   });
 });

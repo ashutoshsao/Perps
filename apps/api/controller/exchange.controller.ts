@@ -25,7 +25,6 @@ export const addBalance = async (req: Request, res: Response) => {
 }
 
 export const createMarket = async (req: Request, res: Response) => {
-
   try {
     const adminEnv = req.headers.token;
     if (adminEnv !== Env.ADMIN_SECRET) {
@@ -45,6 +44,7 @@ export const createMarket = async (req: Request, res: Response) => {
     const existingMarket = await prisma.market.findUnique({
       where: { symbol }
     })
+
     if (existingMarket) {
       res.status(409).json({
         message: "market already present"
