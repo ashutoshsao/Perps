@@ -26,6 +26,7 @@ export type GetDepthPayload = {
 }
 
 export type Market = {
+  marketId: string,
   maxLeverage: number,
   minQty: number,
   symbol: string,
@@ -61,6 +62,7 @@ export type Fill = {
 
 export type OrderRecord = {
   orderId: string,
+  marketId: string,
   side: Side,
   orderType: OrderType,
   status: OrderStatus

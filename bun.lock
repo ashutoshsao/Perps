@@ -32,6 +32,24 @@
         "typescript": "5.5.4",
       },
     },
+    "apps/db-puller": {
+      "name": "@repo/db-puller",
+      "version": "0.0.0",
+      "dependencies": {
+        "@repo/db": "workspace:*",
+        "@repo/redis": "workspace:*",
+        "@repo/types": "workspace:*",
+        "@types/node": "^25.9.2",
+        "zod": "^4.4.3",
+      },
+      "devDependencies": {
+        "@repo/eslint-config": "*",
+        "@repo/typescript-config": "*",
+        "@types/bun": "latest",
+        "eslint": "^8.57.0",
+        "typescript": "5.5.4",
+      },
+    },
     "apps/engine": {
       "name": "@repo/engine",
       "version": "0.0.0",
@@ -325,6 +343,8 @@
     "@repo/api": ["@repo/api@workspace:apps/api"],
 
     "@repo/db": ["@repo/db@workspace:packages/db"],
+
+    "@repo/db-puller": ["@repo/db-puller@workspace:apps/db-puller"],
 
     "@repo/engine": ["@repo/engine@workspace:apps/engine"],
 

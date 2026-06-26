@@ -69,19 +69,19 @@ model Fill {
   takerOrder   Order    @relation("taker_order", fields: [takerOrderId], references: [id])
 }
 
+enum OrderStatus {
+  open
+  filled
+  partially_filled
+  cancelled
+}
+
 enum Side {
-  Buy
-  Sell
+  buy
+  sell
 }
 
 enum OrderType {
-  Market
-  Limit
-}
-
-enum OrderStatus {
-  Open
-  Cancelled
-  Filled
-  PartiallyFilled
+  limit
+  market
 }

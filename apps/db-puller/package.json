@@ -1,0 +1,29 @@
+{
+  "name": "@repo/db-puller",
+  "version": "0.0.0",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "license": "MIT",
+  "scripts": {
+    "lint": "eslint \"**/*.ts\"",
+    "dev": "bun index.ts"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "*",
+    "@repo/typescript-config": "*",
+    "@types/bun": "latest",
+    "eslint": "^8.57.0",
+    "typescript": "5.5.4"
+  },
+  "dependencies": {
+    "@repo/db": "workspace:*",
+    "@repo/redis": "workspace:*",
+    "@repo/types": "workspace:*",
+    "@types/node": "^25.9.2",
+    "zod": "^4.4.3"
+  },
+  "module": "index.ts",
+  "type": "module",
+  "private": true
+}
