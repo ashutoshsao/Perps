@@ -139,7 +139,6 @@ export interface EngineResponse {
   ok: boolean
   data?: unknown
   error?: string
-  globalEvent?: boolean
 }
 
 export interface addBalancePayload {

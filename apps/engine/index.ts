@@ -110,7 +110,7 @@ function scheduleFundingRate(writeRedis: RedisClient) {
     await writeRedis.xAdd(REDIS_KEYS.engineCommands, '*', {
       type: "funding_rate",
       correlationId: crypto.randomUUID(),
-      responseQueueL: '',
+      responseQueue: '',
       payload: JSON.stringify({})
     })
     scheduleFundingRate(writeRedis);

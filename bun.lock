@@ -55,6 +55,24 @@
         "typescript": "5.5.4",
       },
     },
+    "apps/price-feeder": {
+      "name": "@repo/price-feeder",
+      "version": "0.0.0",
+      "dependencies": {
+        "@repo/db": "workspace:*",
+        "@repo/redis": "workspace:*",
+        "@repo/types": "workspace:*",
+        "@types/node": "^25.9.2",
+        "zod": "^4.4.3",
+      },
+      "devDependencies": {
+        "@repo/eslint-config": "*",
+        "@repo/typescript-config": "*",
+        "@types/bun": "latest",
+        "eslint": "^8.57.0",
+        "typescript": "5.5.4",
+      },
+    },
     "apps/tests": {
       "name": "@repo/tests",
       "version": "0.0.0",
@@ -311,6 +329,8 @@
     "@repo/engine": ["@repo/engine@workspace:apps/engine"],
 
     "@repo/eslint-config": ["@repo/eslint-config@workspace:packages/eslint-config"],
+
+    "@repo/price-feeder": ["@repo/price-feeder@workspace:apps/price-feeder"],
 
     "@repo/redis": ["@repo/redis@workspace:packages/redis"],
 
