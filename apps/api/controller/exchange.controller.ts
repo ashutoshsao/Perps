@@ -103,7 +103,7 @@ export const cancelOrder = async (req: Request, res: Response) => {
   };
   const orderId = parsed.data;
   try {
-    const response = await loopback("create_order", { userId, orderId })
+    const response = await loopback("cancel_order", { userId, orderId })
     res.status(200).json(response)
   } catch (error) {
     res.status(400).json({ error: (error as Error).message })
