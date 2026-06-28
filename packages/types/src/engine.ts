@@ -33,6 +33,7 @@ export type Market = {
 }
 
 export type CreateMarketPayload = {
+  marketId: string,
   symbol: string,
   minQty: number,
   maxLeverage: number
@@ -161,4 +162,25 @@ export interface EngineRequest {
   type: EngineCommandType,
   payload: EnginePayload,
   responseQueue: string
+}
+
+export type DepthDiff = {
+  symbol: string
+  firstUpdateId: number
+  finalUpdateId: number
+  prevUpdateId: number
+  bids: [number, number][]
+  asks: [number, number][]
+}
+
+export type CreateOrderResponse = {
+  order: OrderRecord
+  fills: Fill[]
+  makerOrders: OrderRecord[]
+  depthDiff: DepthDiff
+}
+
+export type CancelOrderResponse = {
+  order: OrderRecord
+  depthDiff: DepthDiff
 }

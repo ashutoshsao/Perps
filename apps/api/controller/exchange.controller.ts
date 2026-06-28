@@ -62,6 +62,7 @@ export const createMarket = async (req: Request, res: Response) => {
     });
 
     await loopback("create_market", {
+      marketId: market.id,
       maxLeverage,
       minQty,
       symbol

@@ -1,6 +1,7 @@
 import { cancelOrderPayload } from "@repo/types";
 import { ORDERBOOKS, ORDERS } from "../engine-store";
 import { fetchBalance } from "../helper/fetchBalance";
+import { getDepthDiff } from "../helper/getDepthDiff";
 
 export function cancelOrder(payload: cancelOrderPayload) {
   const { orderId, userId } = payload;
@@ -32,5 +33,11 @@ export function cancelOrder(payload: cancelOrderPayload) {
   //order status update
   order.status = "cancelled";
 
-  return order;
+  const depthDiff = getDepthDiff(
+    order.symbol,
+    order.side === "buy" ? [order.price] : [],
+    order.side === "sell" ? [order.price] : []
+  )
+
+  return { order, depthDiff }
 }

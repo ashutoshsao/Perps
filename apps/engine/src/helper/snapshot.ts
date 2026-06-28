@@ -1,5 +1,5 @@
 import { Balance, Fill, Market, OrderRecord, Position, RestingOrder } from "@repo/types";
-import { BALANCES, FILLS, INDEX_PRICES, MARKETS, ORDERBOOKS, ORDERS, POSITIONS } from "../engine-store";
+import { BALANCES, FILLS, INDEX_PRICES, MARKET_UPDATE_IDS, MARKETS, ORDERBOOKS, ORDERS, POSITIONS } from "../engine-store";
 import fs from "fs/promises";
 import BTree from "sorted-btree";
 
@@ -54,7 +54,8 @@ export async function saveSnapshot(lastSeenStreamId: string) {
       balances: serializedbalances,
       fills: Object.fromEntries(FILLS),
       markets: Object.fromEntries(MARKETS),
-      index_prices: Object.fromEntries(INDEX_PRICES)
+      index_prices: Object.fromEntries(INDEX_PRICES),
+      marketUpdateIds: Object.fromEntries(MARKET_UPDATE_IDS)
     }
   }
 
@@ -102,6 +103,11 @@ export async function loadSnapshot(): Promise<string> {
     //index_prices
     for (const [symbol, price] of Object.entries(state.index_prices)) {
       INDEX_PRICES.set(symbol, price as number);
+    }
+
+    //marketUpdateIds
+    for (const [symbol, id] of Object.entries(state.marketUpdateIds)) {
+      MARKET_UPDATE_IDS.set(symbol, id as number)
     }
 
     //positions

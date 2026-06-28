@@ -8,11 +8,15 @@ export function matchOrder(limitPrice: number, order: OrderRecord) {
   const fills: Fill[] = [];
   let remainingQty = order.qty;
   let totalCost = 0;
+  const touchedAskPrices: number[] = [];
+  const touchedBidPrices: number[] = [];
 
   if (order.side === "buy") {
     orderbook.asks.forEachPair((askPrice, restingOrders) => {
       if (askPrice > limitPrice) return { break: 0 };
       if (remainingQty <= 0) return { break: 0 };
+
+      touchedAskPrices.push(askPrice);
       for (const restingOrder of restingOrders) {
         if (remainingQty <= 0) return { break: 0 };
         const remainingFillQty = restingOrder.qty - restingOrder.filledQty;
@@ -51,6 +55,8 @@ export function matchOrder(limitPrice: number, order: OrderRecord) {
     for (const [bidPrice, restingOrders] of orderbook.bids.entriesReversed()) {
       if (bidPrice < limitPrice) break;
       if (remainingQty <= 0) break;
+
+      touchedBidPrices.push(bidPrice);
       for (const restingOrder of restingOrders) {
         if (remainingQty <= 0) break;
         const remainingFillQty = restingOrder.qty - restingOrder.filledQty;
@@ -84,5 +90,5 @@ export function matchOrder(limitPrice: number, order: OrderRecord) {
       }
     }
   }
-  return { fills, remainingQty, totalCost };
+  return { fills, remainingQty, totalCost, touchedAskPrices, touchedBidPrices };
 }
