@@ -31,7 +31,8 @@ export function matchOrder(limitPrice: number, order: OrderRecord) {
           takerOrderId: order.orderId,
           makerUserId: restingOrder.userId,
           takerUserId: order.userId,
-          makerSide: "sell"
+          makerSide: "sell",
+          createdAt: Date.now()
         })
 
         restingOrder.filledQty += fillQty;
@@ -71,7 +72,8 @@ export function matchOrder(limitPrice: number, order: OrderRecord) {
           takerOrderId: order.orderId,
           makerUserId: restingOrder.userId,
           takerUserId: order.userId,
-          makerSide: "buy"
+          makerSide: "buy",
+          createdAt: Date.now()
         })
 
         restingOrder.filledQty += fillQty;

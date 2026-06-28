@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import type { EngineCommandType, EngineRequest } from "@repo/types";
 import { handleCommand } from "../engine/src/controller/engine.controller";
-import { BALANCES, FILLS, INDEX_PRICES, MARKETS, ORDERBOOKS, ORDERS, POSITIONS } from "../engine/src/engine-store";
+import { BALANCES, FILLS, INDEX_PRICES, MARKET_UPDATE_IDS, MARKETS, ORDERBOOKS, ORDERS, POSITIONS } from "../engine/src/engine-store";
 import { newMarket, subscribedMarkets } from "../price-feeder/src/helper/newMarket";
 
 const WORKSPACE_ROOT = `${import.meta.dir}/../..`;
@@ -16,6 +16,7 @@ let username = "";
 let password = "";
 let authToken = "";
 let marketSymbol = "";
+let apiRestingOrderId = "";
 
 function engineCommand(type: EngineCommandType, payload: unknown = {}) {
   return handleCommand({
@@ -30,6 +31,7 @@ function resetEngineStore() {
   BALANCES.clear();
   FILLS.clear();
   INDEX_PRICES.clear();
+  MARKET_UPDATE_IDS.clear();
   MARKETS.clear();
   ORDERBOOKS.clear();
   ORDERS.clear();
@@ -260,9 +262,38 @@ describe("api integration", () => {
       );
 
       expect(response.status).toBe(200);
-      expect(json.orderId).toBeString();
-      expect(json.filledQty).toBe(0);
-      expect(json.status).toBe("open");
+      expect(json.order.orderId).toBeString();
+      apiRestingOrderId = json.order.orderId;
+      expect(json.order.filledQty).toBe(0);
+      expect(json.order.status).toBe("open");
+      expect(json.depthDiff).toMatchObject({
+        symbol: marketSymbol,
+        firstUpdateId: 1,
+        finalUpdateId: 1,
+        prevUpdateId: 0,
+        bids: [[100, 10]],
+        asks: [],
+      });
+    });
+
+    it("cancels a resting order through the API cancel route", async () => {
+      const { response, json } = await post(
+        `/order/${apiRestingOrderId}`,
+        {},
+        { authorization: `Bearer ${authToken}` },
+      );
+
+      expect(response.status).toBe(200);
+      expect(json.order.orderId).toBe(apiRestingOrderId);
+      expect(json.order.status).toBe("cancelled");
+      expect(json.depthDiff).toMatchObject({
+        symbol: marketSymbol,
+        firstUpdateId: 2,
+        finalUpdateId: 2,
+        prevUpdateId: 1,
+        bids: [[100, 0]],
+        asks: [],
+      });
     });
   });
 });
@@ -289,6 +320,7 @@ describe("engine commands", () => {
 
   it("creates a market and returns sorted depth for resting limit orders", () => {
     engineCommand("create_market", {
+      marketId: "depth-market",
       symbol: "DEPTH-USD",
       maxLeverage: 5,
       minQty: 1,
@@ -349,6 +381,7 @@ describe("engine commands", () => {
 
   it("matches a market buy against the best ask and updates both positions", () => {
     engineCommand("create_market", {
+      marketId: "match-market",
       symbol: "MATCH-USD",
       maxLeverage: 10,
       minQty: 1,
@@ -375,11 +408,11 @@ describe("engine commands", () => {
       slippageBps: 10_000,
     });
 
-    expect(takerOrder.status).toBe("filled");
-    expect(takerOrder.filledQty).toBe(4);
+    expect(takerOrder.order.status).toBe("filled");
+    expect(takerOrder.order.filledQty).toBe(4);
     expect(takerOrder.fills).toHaveLength(1);
     expect(takerOrder.fills[0]).toMatchObject({
-      makerOrderId: makerOrder.orderId,
+      makerOrderId: makerOrder.order.orderId,
       makerUserId: "seller",
       takerUserId: "buyer",
       makerSide: "sell",
@@ -387,8 +420,20 @@ describe("engine commands", () => {
       price: 100,
       symbol: "MATCH-USD",
     });
-    expect(ORDERS.get(makerOrder.orderId)?.status).toBe("partially_filled");
-    expect(ORDERS.get(makerOrder.orderId)?.filledQty).toBe(4);
+    expect(takerOrder.fills[0].createdAt).toBeNumber();
+    expect(takerOrder.makerOrders).toHaveLength(1);
+    expect(takerOrder.makerOrders[0].orderId).toBe(makerOrder.order.orderId);
+    expect(takerOrder.makerOrders[0].status).toBe("partially_filled");
+    expect(takerOrder.depthDiff).toEqual({
+      symbol: "MATCH-USD",
+      firstUpdateId: 2,
+      finalUpdateId: 2,
+      prevUpdateId: 1,
+      bids: [],
+      asks: [[100, 6]],
+    });
+    expect(ORDERS.get(makerOrder.order.orderId)?.status).toBe("partially_filled");
+    expect(ORDERS.get(makerOrder.order.orderId)?.filledQty).toBe(4);
     expect(POSITIONS.get("buyer")?.get("MATCH-USD")).toMatchObject({
       positionSide: "long",
       qty: 4,
@@ -404,6 +449,7 @@ describe("engine commands", () => {
 
   it("rejects orders that violate market limits or have no market liquidity", () => {
     engineCommand("create_market", {
+      marketId: "validation-market",
       symbol: "VALIDATION-USD",
       maxLeverage: 3,
       minQty: 5,
@@ -449,6 +495,7 @@ describe("engine commands", () => {
 
   it("partially fills a market order and refunds margin for unfilled quantity", () => {
     engineCommand("create_market", {
+      marketId: "partial-market",
       symbol: "PARTIAL-MARKET-USD",
       maxLeverage: 10,
       minQty: 1,
@@ -475,10 +522,11 @@ describe("engine commands", () => {
       slippageBps: 10_000,
     });
 
-    expect(takerOrder.status).toBe("partially_filled");
-    expect(takerOrder.filledQty).toBe(3);
+    expect(takerOrder.order.status).toBe("partially_filled");
+    expect(takerOrder.order.filledQty).toBe(3);
     expect(takerOrder.fills).toHaveLength(1);
-    expect(ORDERS.get(makerOrder.orderId)?.status).toBe("filled");
+    expect(takerOrder.depthDiff.asks).toEqual([[100, 0]]);
+    expect(ORDERS.get(makerOrder.order.orderId)?.status).toBe("filled");
     expect(engineCommand("get_depth", { symbol: "PARTIAL-MARKET-USD" }).asks).toEqual([]);
     expect(engineCommand("get_balance", { userId: "taker" })).toEqual({
       available: 700,
@@ -488,6 +536,7 @@ describe("engine commands", () => {
 
   it("keeps unfilled limit quantity resting and refunds price improvement", () => {
     engineCommand("create_market", {
+      marketId: "price-improvement-market",
       symbol: "PRICE-IMPROVEMENT-USD",
       maxLeverage: 10,
       minQty: 1,
@@ -514,8 +563,16 @@ describe("engine commands", () => {
       leverage: 1,
     });
 
-    expect(buyerOrder.status).toBe("partially_filled");
-    expect(buyerOrder.filledQty).toBe(2);
+    expect(buyerOrder.order.status).toBe("partially_filled");
+    expect(buyerOrder.order.filledQty).toBe(2);
+    expect(buyerOrder.depthDiff).toEqual({
+      symbol: "PRICE-IMPROVEMENT-USD",
+      firstUpdateId: 2,
+      finalUpdateId: 2,
+      prevUpdateId: 1,
+      bids: [[110, 3]],
+      asks: [[100, 0]],
+    });
     expect(engineCommand("get_depth", { symbol: "PRICE-IMPROVEMENT-USD" })).toEqual({
       symbol: "PRICE-IMPROVEMENT-USD",
       asks: [],
@@ -529,6 +586,7 @@ describe("engine commands", () => {
 
   it("cancels a resting order and refunds locked margin", () => {
     engineCommand("create_market", {
+      marketId: "cancel-market",
       symbol: "CANCEL-USD",
       maxLeverage: 5,
       minQty: 1,
@@ -551,10 +609,18 @@ describe("engine commands", () => {
 
     const cancelledOrder = engineCommand("cancel_order", {
       userId: "canceller",
-      orderId: order.orderId,
+      orderId: order.order.orderId,
     });
 
-    expect(cancelledOrder.status).toBe("cancelled");
+    expect(cancelledOrder.order.status).toBe("cancelled");
+    expect(cancelledOrder.depthDiff).toEqual({
+      symbol: "CANCEL-USD",
+      firstUpdateId: 2,
+      finalUpdateId: 2,
+      prevUpdateId: 1,
+      bids: [[50, 0]],
+      asks: [],
+    });
     expect(engineCommand("get_balance", { userId: "canceller" })).toEqual({
       available: 1_000,
       locked: 0,

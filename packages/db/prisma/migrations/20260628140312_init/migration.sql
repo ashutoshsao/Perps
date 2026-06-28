@@ -1,11 +1,11 @@
 -- CreateEnum
-CREATE TYPE "Side" AS ENUM ('Buy', 'Sell');
+CREATE TYPE "OrderStatus" AS ENUM ('open', 'filled', 'partially_filled', 'cancelled');
 
 -- CreateEnum
-CREATE TYPE "OrderType" AS ENUM ('Market', 'Limit');
+CREATE TYPE "Side" AS ENUM ('buy', 'sell');
 
 -- CreateEnum
-CREATE TYPE "OrderStatus" AS ENUM ('Open', 'Cancelled', 'Filled', 'PartiallyFilled');
+CREATE TYPE "OrderType" AS ENUM ('limit', 'market');
 
 -- CreateTable
 CREATE TABLE "User" (

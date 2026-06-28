@@ -1,6 +1,6 @@
 import { getRedisClient } from "@repo/redis";
-import { EngineResponse, REDIS_KEYS } from "@repo/types";
-import type { EngineCommandType, RedisResponseType } from "@repo/types";
+import { REDIS_KEYS } from "@repo/types";
+import type { RedisResponseType } from "@repo/types";
 import { updateDb } from "./src/updateDb";
 const readRedis = getRedisClient();
 

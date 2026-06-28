@@ -59,6 +59,7 @@ export type Fill = {
   qty: number,
   price: number,
   symbol: string
+  createdAt: number
 }
 
 export type OrderRecord = {

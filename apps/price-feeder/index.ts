@@ -15,19 +15,27 @@ ws.on("open", async () => {
 })
 
 ws.on("message", async (data) => {
-  const msg = JSON.parse(data.toString());
+  const msg = JSON.parse(data.toString())
   if (!msg.e) return
 
+  const symbol = msg.s.replace("USDT", "")
+  const price = Math.floor(parseFloat(msg.i) * 1_000_000)
+
+  // push to engine for liquidation checks
   const client = await writeRedis;
   await client.xAdd(REDIS_KEYS.engineCommands, '*', {
-    type: "update_index_price",
+    type: 'update_index_price',
     correlationId: crypto.randomUUID(),
     responseQueue: '',
-    payload: JSON.stringify({
-      symbol: msg.s.replace("USDT", ''),// "SOLUSDT" => "SOL",
-      price: Math.floor(parseFloat(msg.i))
-    })
+    payload: JSON.stringify({ symbol, price })
   })
+
+  // publish directly to WSS for frontend mark price ticks
+  await client.publish(`market:${symbol}:markPrice`, JSON.stringify({
+    symbol,
+    price,
+    time: msg.E
+  }))
 })
 
 ws.on("ping", (data) => ws.pong(data))

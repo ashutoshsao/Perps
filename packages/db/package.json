@@ -23,5 +23,7 @@
     "pg": "^8.21.0",
     "zod": "^4.4.3"
   },
-  "private": true
+  "private": true,
+  "module": "index.ts",
+  "type": "module"
 }
