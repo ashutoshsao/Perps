@@ -1,5 +1,5 @@
 import { OrderRecord } from "@repo/types"
-import { prisma } from "@repo/db"
+import { insertFill, prisma } from "@repo/db"
 
 export async function updateDb(type: string, data: unknown) {
   if (type === "cancel_order") {
@@ -67,6 +67,14 @@ export async function updateDb(type: string, data: unknown) {
           }
         })
       })
+      // write raw fill to TimescaleDB for candle generation
+      await insertFill(
+        order.symbol,
+        fill.price,
+        fill.qty,
+        fill.makerSide === "buy" ? "sell" : "buy",
+        fill.createdAt
+      )
     }
   }
 }

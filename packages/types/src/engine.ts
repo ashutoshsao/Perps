@@ -1,4 +1,5 @@
 import BTree from "sorted-btree";
+import { getDepthApiSchema } from "./types";
 
 type OrderType = "market" | "limit";
 type Side = "buy" | "sell";
@@ -155,8 +156,7 @@ export type EnginePayload =
   | cancelOrderPayload
   | addBalancePayload
   | CreateMarketPayload
-  | getBalancePayload;
-
+  | getBalancePayload
 
 export interface EngineRequest {
   correlationId: string,

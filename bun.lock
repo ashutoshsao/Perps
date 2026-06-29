@@ -164,6 +164,7 @@
         "@repo/eslint-config": "*",
         "@repo/typescript-config": "*",
         "@types/bun": "latest",
+        "@types/pg": "^8.20.0",
         "eslint": "^8.57.0",
         "prisma": "^7.8.0",
         "typescript": "5.5.4",

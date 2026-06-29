@@ -54,6 +54,16 @@ export const DepthParamsSchema = z.object({
   symbol: z.string().min(1),
 })
 
+export const getDepthApiSchema = z.string()
+
+export const getKLinesApiSchema = z.object({
+  symbol: z.string().min(1),
+  interval: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]).default("1m"),
+  from: z.coerce.number().optional(),
+  to: z.coerce.number().optional(),
+  limit: z.coerce.number().int().min(1).max(1000).default(200),
+})
+
 export type SignupApiType = z.infer<typeof SignupApiSchema>
 export type SigninApiType = z.infer<typeof SigninApiSchema>
 export type CreateOrderApiType = z.infer<typeof CreateOrderApiSchema>
