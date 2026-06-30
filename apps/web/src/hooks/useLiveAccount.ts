@@ -153,11 +153,10 @@ export function useLiveAccount(token: string | null, snapshotOrders: UserOrder[]
 
 export function useLiveAccountLists(
   token: string | null,
-  snapshotOpenOrders: UserOrder[],
-  snapshotOrderHistory: UserOrder[],
+  snapshotOrders: UserOrder[],
   snapshotFills: UserFill[],
 ) {
-  const account = useLiveAccount(token, [...snapshotOpenOrders, ...snapshotOrderHistory], snapshotFills);
+  const account = useLiveAccount(token, snapshotOrders, snapshotFills);
 
   const openOrders = useMemo(
     () => account.orders.filter((order) => isOpenLimitOrder(order)),

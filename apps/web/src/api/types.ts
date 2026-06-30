@@ -6,6 +6,13 @@ export type Market = {
   minQty: number;
 };
 
+export type CreateMarketPayload = {
+  symbol: string;
+  imageUrl: string;
+  maxLeverage: number;
+  minQty: number;
+};
+
 export type Depth = {
   symbol: string;
   asks: [number, number][];

@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api/client";
+import { normalizeMarketSymbol } from "./api/symbols";
 import type { Balance, Depth, Market, Ticker, Trade, UserFill, UserOrder } from "./api/types";
 import { CandlestickChart } from "./features/chart/CandlestickChart";
 import { useAsyncData } from "./hooks/useAsyncData";
@@ -9,7 +10,7 @@ import { useLiveAccountLists } from "./hooks/useLiveAccount";
 import { useLiveTrades } from "./hooks/useLiveTrades";
 import { useMarkPrice } from "./hooks/useMarkPrice";
 
-type Route = "trade" | "wallet" | "signin" | "signup";
+type Route = "trade" | "wallet" | "admin" | "signin" | "signup";
 type OrderSide = "buy" | "sell";
 type OrderType = "limit" | "market";
 type ChartInterval = "1m" | "5m" | "15m" | "1h" | "4h" | "1d";
@@ -24,11 +25,11 @@ type DerivedPosition = {
 
 const AUTH_TOKEN_KEY = "perps.auth.token";
 const slippagePresetPercents = [0.1, 0.5, 1, 2, 5];
-const primaryMarketOrder = ["BTC-USD", "ETH-USD", "SOL-USD"];
+const primaryMarketOrder = ["BTC", "ETH", "SOL"];
 const fallbackMarkets: Market[] = [
-  { id: "btc-usd", symbol: "BTC-USD", imageUrl: "", maxLeverage: 10, minQty: 1 },
-  { id: "eth-usd", symbol: "ETH-USD", imageUrl: "", maxLeverage: 10, minQty: 1 },
-  { id: "sol-usd", symbol: "SOL-USD", imageUrl: "", maxLeverage: 10, minQty: 1 },
+  { id: "btc", symbol: "BTC", imageUrl: "", maxLeverage: 10, minQty: 1 },
+  { id: "eth", symbol: "ETH", imageUrl: "", maxLeverage: 10, minQty: 1 },
+  { id: "sol", symbol: "SOL", imageUrl: "", maxLeverage: 10, minQty: 1 },
 ];
 const chartIntervals: ChartInterval[] = ["1m", "5m", "15m", "1h", "4h", "1d"];
 
@@ -36,6 +37,7 @@ function getRouteFromLocation(): Route {
   const hashRoute = window.location.hash.replace("#/", "");
   const route = hashRoute || window.location.pathname.replace(/^\//, "");
   if (route === "wallet") return route;
+  if (route === "admin") return route;
   if (route === "signin" || route === "signup") return route;
   return "trade";
 }
@@ -80,6 +82,7 @@ export function App() {
   if (route === "signin") return <AuthScreen mode="signin" onAuth={handleAuth} />;
   if (route === "signup") return <AuthScreen mode="signup" onAuth={handleAuth} />;
   if (route === "wallet") return <WalletScreen token={token} onSignOut={handleSignOut} />;
+  if (route === "admin") return <AdminScreen token={token} onSignOut={handleSignOut} />;
   return <ExchangeShell token={token} onSignOut={handleSignOut} />;
 }
 
@@ -220,6 +223,9 @@ function WalletScreen({ token, onSignOut }: { token: string | null; onSignOut: (
           <HeaderActionButton onClick={() => navigate("trade")}>
             Trade
           </HeaderActionButton>
+          <HeaderActionButton onClick={() => token ? navigate("admin") : navigate("signin")}>
+            Admin
+          </HeaderActionButton>
           <HeaderActionButton onClick={token ? onSignOut : () => navigate("signin")} emphasis={!token}>
             {token ? "Sign out" : "Sign in"}
           </HeaderActionButton>
@@ -261,6 +267,199 @@ function WalletScreen({ token, onSignOut }: { token: string | null; onSignOut: (
   );
 }
 
+function AdminScreen({ token, onSignOut }: { token: string | null; onSignOut: () => void }) {
+  const [adminToken, setAdminToken] = useState("");
+  const [symbol, setSymbol] = useState("BTC");
+  const [imageUrl, setImageUrl] = useState("");
+  const [maxLeverage, setMaxLeverage] = useState("10");
+  const [minQty, setMinQty] = useState("1");
+  const [isCreating, setIsCreating] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const marketsState = useAsyncData(() => api.getMarkets(), [message]);
+  const markets = sortMarkets(marketsState.data?.markets ?? []);
+
+  async function handleCreateMarket(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!token) {
+      navigate("signin");
+      return;
+    }
+
+    setMessage(null);
+    setError(null);
+
+    const normalizedSymbol = normalizeMarketSymbol(symbol);
+    const parsedMaxLeverage = parsePositiveInt(maxLeverage);
+    const parsedMinQty = parsePositiveInt(minQty);
+
+    if (!adminToken.trim()) {
+      setError("Enter the admin token.");
+      return;
+    }
+    if (!normalizedSymbol) {
+      setError("Enter a market symbol like BTC.");
+      return;
+    }
+    if (!parsedMaxLeverage) {
+      setError("Max leverage must be a positive whole number.");
+      return;
+    }
+    if (!parsedMinQty) {
+      setError("Minimum quantity must be a positive whole number.");
+      return;
+    }
+
+    try {
+      setIsCreating(true);
+      const response = await api.createMarket(token, adminToken.trim(), {
+        symbol: normalizedSymbol,
+        imageUrl: imageUrl.trim(),
+        maxLeverage: parsedMaxLeverage,
+        minQty: parsedMinQty,
+      });
+      setSymbol(normalizedSymbol);
+      setMessage(`Market ${normalizedSymbol} created. ID: ${response.marketId}.`);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Market creation failed");
+    } finally {
+      setIsCreating(false);
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-exchange-950 text-exchange-100">
+      <header className="flex h-16 items-center justify-between border-b border-exchange-800 px-4">
+        <button type="button" onClick={() => navigate("trade")} className="text-left">
+          <BrandBar />
+        </button>
+        <div className="flex items-center gap-2">
+          <HeaderActionButton onClick={() => navigate("trade")}>
+            Trade
+          </HeaderActionButton>
+          <HeaderActionButton onClick={() => token ? navigate("wallet") : navigate("signin")}>
+            Wallet
+          </HeaderActionButton>
+          <HeaderActionButton onClick={token ? onSignOut : () => navigate("signin")} emphasis={!token}>
+            {token ? "Sign out" : "Sign in"}
+          </HeaderActionButton>
+        </div>
+      </header>
+
+      <section className="mx-auto grid max-w-5xl gap-px bg-exchange-800 p-px sm:mt-10 lg:grid-cols-[1fr_1.15fr]">
+        <div className="bg-exchange-900 p-5">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-300">Admin</p>
+          <h1 className="mt-3 text-xl font-semibold text-white">Create market</h1>
+          <p className="mt-2 text-sm text-exchange-400">Add a base-asset market to the engine and DB projection.</p>
+
+          <div className="mt-6 border border-exchange-800">
+            <div className="border-b border-exchange-800 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-exchange-500">
+              Existing markets
+            </div>
+            <div className="max-h-72 overflow-y-auto">
+              {markets.length === 0 ? (
+                <PanelState message={marketsState.isLoading ? "Loading markets" : "No markets created"} />
+              ) : markets.map((market) => (
+                <div key={market.id} className="grid grid-cols-[1fr_auto] gap-3 border-b border-exchange-800 px-3 py-3 last:border-b-0">
+                  <div>
+                    <p className="font-mono text-sm font-semibold text-white">{market.symbol}</p>
+                    <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-exchange-500">PERPETUAL</p>
+                  </div>
+                  <div className="text-right font-mono text-xs text-exchange-400">
+                    <p>{market.maxLeverage}x</p>
+                    <p className="mt-1">min {market.minQty}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <form onSubmit={handleCreateMarket} className="bg-exchange-900 p-5">
+          <div className="grid gap-4">
+            <AdminTextInput
+              label="Admin token"
+              value={adminToken}
+              onChange={setAdminToken}
+              placeholder="ADMIN_SECRET"
+              type="password"
+            />
+            <AdminTextInput
+              label="Symbol"
+              value={symbol}
+              onChange={(value) => setSymbol(normalizeMarketSymbol(value))}
+              placeholder="BTC"
+            />
+            <AdminTextInput
+              label="Image URL"
+              value={imageUrl}
+              onChange={setImageUrl}
+              placeholder="https://..."
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <AdminTextInput
+                label="Max leverage"
+                value={maxLeverage}
+                onChange={setMaxLeverage}
+                placeholder="10"
+                inputMode="numeric"
+              />
+              <AdminTextInput
+                label="Min quantity"
+                value={minQty}
+                onChange={setMinQty}
+                placeholder="1"
+                inputMode="numeric"
+              />
+            </div>
+          </div>
+
+          {error ? <div className="mt-4 border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-xs text-rose-200">{error}</div> : null}
+          {message ? <div className="mt-4 border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs text-emerald-200">{message}</div> : null}
+
+          <button
+            type="submit"
+            disabled={isCreating || !token}
+            className="mt-4 h-11 w-full bg-cyan-300 text-sm font-semibold text-exchange-950 hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {token ? isCreating ? "Creating..." : "Create market" : "Sign in as admin"}
+          </button>
+        </form>
+      </section>
+    </main>
+  );
+}
+
+function AdminTextInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+  inputMode,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  type?: string;
+  inputMode?: "decimal" | "email" | "none" | "numeric" | "search" | "tel" | "text" | "url";
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-[10px] font-medium uppercase tracking-[0.14em] text-exchange-500">{label}</span>
+      <input
+        type={type}
+        inputMode={inputMode}
+        value={value}
+        placeholder={placeholder}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-11 w-full border border-exchange-800 bg-exchange-950 px-3 font-mono text-sm text-white outline-none placeholder:text-exchange-600 focus:border-cyan-300"
+      />
+    </label>
+  );
+}
+
 function ExchangeShell({ token, onSignOut }: { token: string | null; onSignOut: () => void }) {
   const marketsState = useAsyncData(() => api.getMarkets(), []);
   const markets = marketsState.data?.markets ?? [];
@@ -284,19 +483,15 @@ function ExchangeShell({ token, onSignOut }: { token: string | null; onSignOut: 
     () => token ? api.getBalance(token).then((data) => data.response) : Promise.resolve(null),
     [token, accountVersion]
   );
-  const openOrdersState = useAsyncData(
-    () => token ? api.getOpenOrders(token).then((data) => data.orders) : Promise.resolve([]),
-    [token, accountVersion]
-  );
-  const orderHistoryState = useAsyncData(
-    () => token ? api.getOrderHistory(token).then((data) => data.orders) : Promise.resolve([]),
+  const ordersState = useAsyncData(
+    () => token ? api.getOrders(token).then((data) => data.orders) : Promise.resolve([]),
     [token, accountVersion]
   );
   const fillsState = useAsyncData(
     () => token ? api.getFills(token).then((data) => data.fills) : Promise.resolve([]),
     [token, accountVersion]
   );
-  const liveAccount = useLiveAccountLists(token, openOrdersState.data ?? [], orderHistoryState.data ?? [], fillsState.data ?? []);
+  const liveAccount = useLiveAccountLists(token, ordersState.data ?? [], fillsState.data ?? []);
   const currentMarket = useMemo(() => visibleMarkets.find((market) => market.symbol === selectedMarket) ?? null, [visibleMarkets, selectedMarket]);
   const lastAccountActivityRef = useRef("");
   const accountActivityKey = useMemo(() => {
@@ -368,7 +563,7 @@ function ExchangeShell({ token, onSignOut }: { token: string | null; onSignOut: 
             <BrandBar />
           </div>
 
-          <div className="grid flex-1 grid-cols-2 gap-px bg-exchange-800 lg:grid-cols-[220px_repeat(4,1fr)_220px]">
+          <div className="grid flex-1 grid-cols-2 gap-px bg-exchange-800 lg:grid-cols-[220px_repeat(4,1fr)_280px]">
             <MarketPicker
               markets={visibleMarkets}
               selectedSymbol={selectedMarket}
@@ -384,6 +579,9 @@ function ExchangeShell({ token, onSignOut }: { token: string | null; onSignOut: 
             <TickerStat label="Volume" value={formatTickerVolume(tickerState.data)} tone="neutral" />
             <TickerStat label="Mark WS" value={markPriceState.error ? "Error" : markPriceState.isLive ? "Live" : "Waiting"} tone={markPriceState.error ? "negative" : markPriceState.isLive ? "positive" : "accent"} />
             <div className="flex h-14 items-center justify-end gap-2 bg-exchange-900 px-3 lg:h-16">
+              <HeaderActionButton onClick={() => token ? navigate("admin") : navigate("signin")}>
+                Admin
+              </HeaderActionButton>
               <HeaderActionButton onClick={() => token ? navigate("wallet") : navigate("signin")}>
                 Wallet
               </HeaderActionButton>
@@ -439,7 +637,7 @@ function ExchangeShell({ token, onSignOut }: { token: string | null; onSignOut: 
                   markets={visibleMarkets}
                   selectedMarket={selectedMarket}
                   markPrice={markPriceState.data?.price}
-                  isLoading={balanceState.isLoading || openOrdersState.isLoading || orderHistoryState.isLoading || fillsState.isLoading}
+                  isLoading={balanceState.isLoading || ordersState.isLoading || fillsState.isLoading}
                   onOrderSettled={refreshTradingData}
                 />
               </Panel>
@@ -606,11 +804,9 @@ function MarketPicker({
   const normalizedQuery = query.trim().toLowerCase();
   const filteredMarkets = normalizedQuery
     ? markets.filter((market) => {
-        const perpSymbol = formatPerpSymbol(market.symbol).toLowerCase();
-        const pairSymbol = formatPairSymbol(market.symbol).toLowerCase();
+        const aliases = getMarketSearchAliases(market.symbol);
         return market.symbol.toLowerCase().includes(normalizedQuery)
-          || perpSymbol.includes(normalizedQuery)
-          || pairSymbol.includes(normalizedQuery);
+          || aliases.some((alias) => alias.includes(normalizedQuery));
       })
     : markets;
 
@@ -664,7 +860,7 @@ function MarketPicker({
               ref={inputRef}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search BTC-PERP or BTC/USD"
+              placeholder="Search BTC"
               className="h-9 w-full border border-exchange-800 bg-exchange-900 px-3 font-mono text-xs text-white outline-none placeholder:text-exchange-600 focus:border-cyan-300"
             />
           </div>
@@ -1491,7 +1687,7 @@ function MarketPulse({
 }) {
   const items = [
     ["Spread", "-"],
-    ["Mark", formatMarkPrice(markPrice, ticker ?? null, symbol ?? "BTC-USD")],
+    ["Mark", formatMarkPrice(markPrice, ticker ?? null, symbol ?? "BTC")],
     ["24h", formatTickerChange(ticker ?? null)],
     ["Status", "Live"],
   ];
@@ -1594,12 +1790,21 @@ function splitMarketSymbol(symbol: string) {
 
 function formatPerpSymbol(symbol: string) {
   const { base } = splitMarketSymbol(symbol);
-  return `${base}-PERP`;
+  return base;
 }
 
-function formatPairSymbol(symbol: string) {
+function formatPairSymbol(_symbol: string) {
+  return "PERPETUAL";
+}
+
+function getMarketSearchAliases(symbol: string) {
   const { base, quote } = splitMarketSymbol(symbol);
-  return `${base}/${quote}`;
+  return [
+    base,
+    `${base}-perp`,
+    `${base}/${quote}`.toLowerCase(),
+    "perpetual",
+  ];
 }
 
 function formatMarkPrice(markPrice: number | undefined, _ticker: Ticker | null, _fallback: string) {

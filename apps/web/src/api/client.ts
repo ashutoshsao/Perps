@@ -1,9 +1,10 @@
-import type { AuthResponse, Balance, Candle, Depth, Market, OrderMutationResponse, OrderPayload, Ticker, Trade, UserFill, UserOrder } from "./types";
+import type { AuthResponse, Balance, Candle, CreateMarketPayload, Depth, Market, OrderMutationResponse, OrderPayload, Ticker, Trade, UserFill, UserOrder } from "./types";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "/api";
 
 type RequestOptions = {
   token?: string | null;
+  adminToken?: string | null;
   method?: "GET" | "POST" | "DELETE";
   body?: unknown;
 };
@@ -23,6 +24,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   if (options.body !== undefined) headers["content-type"] = "application/json";
   if (options.token) headers.authorization = `Bearer ${options.token}`;
+  if (options.adminToken) headers.token = options.adminToken;
 
   const response = await fetch(`${API_URL}${path}`, {
     method: options.method ?? "GET",
@@ -50,6 +52,9 @@ export const api = {
   getMarkets() {
     return request<{ markets: Market[] }>("/markets");
   },
+  createMarket(token: string, adminToken: string, payload: CreateMarketPayload) {
+    return request<{ marketId: string }>("/market", { method: "POST", token, adminToken, body: payload });
+  },
   getTicker(symbol: string) {
     return request<Ticker>(`/ticker/${encodeURIComponent(symbol)}`);
   },
@@ -70,12 +75,6 @@ export const api = {
   },
   getOrders(token: string) {
     return request<{ orders: UserOrder[] }>("/orders", { token });
-  },
-  getOpenOrders(token: string) {
-    return request<{ orders: UserOrder[] }>("/orders/open", { token });
-  },
-  getOrderHistory(token: string) {
-    return request<{ orders: UserOrder[] }>("/orders/history", { token });
   },
   getFills(token: string) {
     return request<{ fills: UserFill[] }>("/fills", { token });

@@ -5,7 +5,7 @@ import type { Trade } from "../api/types";
 function trade(time: string, price: number, qty: number): Trade {
   return {
     time,
-    symbol: "BTC-USD",
+    symbol: "BTC",
     price,
     qty,
     side: "buy",
