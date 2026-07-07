@@ -17,8 +17,14 @@ export function createOrder(payload: createOrderPayload) {
   }
   const limitPrice = orderType === "limit" ? payload.price :
     side === "buy" ?
-      Math.floor(orderbook.asks.minKey()! * ((1 + payload.slippageBps) / 10000)) :
-      Math.floor(orderbook.bids.maxKey()! * ((1 - payload.slippageBps) / 10000))
+      Math.floor(orderbook.asks.minKey()! * (1 + payload.slippageBps / 10000)) :
+      Math.floor(orderbook.bids.maxKey()! * (1 - payload.slippageBps / 10000))
+
+  if (orderType === "market") {
+    const bestPrice = side === "buy" ? orderbook.asks.minKey()! : orderbook.bids.maxKey()!;
+    const crossesBestPrice = side === "buy" ? bestPrice <= limitPrice : bestPrice >= limitPrice;
+    if (!crossesBestPrice) throw new Error("no liquidity within slippage");
+  }
 
   //check margin for that market;
   const market = MARKETS.get(symbol);

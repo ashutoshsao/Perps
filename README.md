@@ -78,7 +78,7 @@ That choice is deliberate for a prototype. It keeps the hot path fast and easy t
 apps/
   api/           Express API, auth, request validation, Redis loopback
   engine/        Matching engine, risk logic, snapshots, command dispatcher
-  price-feeder/  Binance mark-price websocket experiment
+  price-feeder/  Binance mark-price feed for index prices and liquidation checks
   tests/         Bun tests covering API + engine behavior
   web/           Vite shell from the original workspace scaffold
 
@@ -109,7 +109,7 @@ That loop is the heart of the repo.
 - TypeScript
 - Express 5
 - Redis Streams
-- PostgreSQL
+- PostgreSQL / TimescaleDB
 - Prisma
 - Zod
 - Argon2
@@ -126,6 +126,16 @@ Install dependencies:
 bun install
 ```
 
+The app is split across several cooperating processes. Before using the exchange flow, these backing services need to be available:
+
+- Redis for command, response, and event streams
+- TimescaleDB/Postgres for users, markets, orders, fills, and candle data
+- `apps/engine` for the single-writer matching/risk loop
+- `apps/api` for HTTP auth, trading, account, and market-data routes
+- `apps/db-puller` to persist engine events into Postgres/TimescaleDB
+- `apps/wss` for realtime market and user channels
+- `apps/price-feeder` for external mark-price updates; index prices and liquidation checks depend on it
+
 Create environment files for the services that need them. The project expects these variables:
 
 ```sh
@@ -134,15 +144,32 @@ DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DB
 REDIS_URL=redis://localhost:6379
 JWT_SECRET=dev-jwt-secret
 ADMIN_SECRET=dev-admin-secret
+PORT_WSS=3030
 ```
 
-The Redis package includes `packages/redis/example.env` as the minimal reference. The tests also look for env files in `packages/db/.env`, `packages/redis/.env`, `apps/engine/.env`, and `apps/api/.env`.
+The Redis package includes `packages/redis/example.env` as the minimal reference. The tests also look for env files in `packages/db/.env`, `packages/redis/.env`, `apps/engine/.env`, and `apps/api/.env`. The web app reads `apps/web/.env.example` for `VITE_API_URL` and `VITE_WS_URL`.
 
-Run the API and engine in separate terminals:
+Run database migrations before starting the app services:
+
+```sh
+cd packages/db
+bunx prisma migrate deploy
+```
+
+Run the core services in separate terminals:
 
 ```sh
 bun --filter @repo/engine dev
 bun --filter @repo/api dev
+bun --filter @repo/db-puller dev
+bun --filter @repo/wss dev
+bun --filter @repo/price-feeder dev
+```
+
+Run the web app in another terminal if you want the browser client:
+
+```sh
+bun --filter web dev
 ```
 
 Run tests:
@@ -152,6 +179,51 @@ bun --filter @repo/tests test
 ```
 
 The integration tests require `DATABASE_URL` and `REDIS_URL` to point at running services.
+
+## Docker Setup
+
+Docker Compose is the easiest way to run the full local stack because the app needs Redis, TimescaleDB/Postgres, migrations, and multiple Bun services to be started with matching environment variables.
+
+The Docker setup provides:
+
+- `redis`
+- `timescaledb`
+- a one-shot migration service for `packages/db/prisma`
+- `api`
+- `engine`
+- `db-puller`
+- `wss`
+- `web`
+- `price-feeder`
+
+Docker-specific environment variables live in `.env.docker`. Inside Docker, service-to-service URLs use container hostnames:
+
+```sh
+DATABASE_URL=postgresql://perps:perps@timescaledb:5432/perps
+REDIS_URL=redis://redis:6379
+```
+
+Build and start the stack:
+
+```sh
+docker compose --env-file .env.docker up --build
+```
+
+Open the web app at `http://localhost:5173`. The API is exposed on `http://localhost:4000`, the websocket server on `ws://localhost:3030`, Redis on `localhost:6379`, and TimescaleDB/Postgres on `localhost:5432`.
+
+Stop the stack:
+
+```sh
+docker compose down
+```
+
+Remove Docker-managed Redis, TimescaleDB, and engine snapshot data:
+
+```sh
+docker compose down -v
+```
+
+The app containers are built from service-specific Dockerfiles under `apps/*/Dockerfile`, and the migration container uses `packages/db/Dockerfile`. They are all based on the official `oven/bun` image because this repo runs TypeScript directly with Bun and uses `bun.lock`.
 
 ## Example Flow
 
@@ -170,7 +242,7 @@ curl -X POST http://localhost:4000/api/market \
   -H 'content-type: application/json' \
   -H 'authorization: Bearer YOUR_JWT' \
   -H 'token: YOUR_ADMIN_SECRET' \
-  -d '{"symbol":"BTC-USD","imageUrl":"https://example.com/btc.png","maxLeverage":10,"minQty":1}'
+  -d '{"symbol":"BTC","imageUrl":"https://example.com/btc.png","maxLeverage":10,"minQty":1}'
 ```
 
 Add USD balance:
@@ -188,7 +260,7 @@ Place a limit order:
 curl -X POST http://localhost:4000/api/order \
   -H 'content-type: application/json' \
   -H 'authorization: Bearer YOUR_JWT' \
-  -d '{"orderType":"limit","side":"buy","price":100,"qty":10,"leverage":1,"symbol":"BTC-USD"}'
+  -d '{"orderType":"limit","side":"buy","price":100,"qty":10,"leverage":1,"symbol":"BTC"}'
 ```
 
 Place a market order:
@@ -197,7 +269,7 @@ Place a market order:
 curl -X POST http://localhost:4000/api/order \
   -H 'content-type: application/json' \
   -H 'authorization: Bearer YOUR_JWT' \
-  -d '{"orderType":"market","side":"buy","qty":4,"leverage":1,"slippageBps":100,"symbol":"BTC-USD"}'
+  -d '{"orderType":"market","side":"buy","qty":4,"leverage":1,"slippageBps":100,"symbol":"BTC"}'
 ```
 
 ## Design Notes

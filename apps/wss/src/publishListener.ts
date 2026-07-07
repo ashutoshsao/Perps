@@ -1,28 +1,28 @@
 import { getRedisClient } from "@repo/redis";
-import { connectedSockets } from "./wsServer";
+import { connectedSockets } from "./channelRegistry";
 
-
-const subscribedChannels = new Set<string>()
+const subscribedChannels = new Map<string, Promise<void>>()
+const redisSubClientPromise = getRedisClient()
 
 export async function subscribeToChannel(channel: string) {
-  const redisSubClient = await getRedisClient();
-  if (subscribedChannels.has(channel)) return  // already subscribed — skip
+  const existingSubscription = subscribedChannels.get(channel)
+  if (existingSubscription) return existingSubscription
 
-  redisSubClient.subscribe(channel, (message) => {
-    const sockets = connectedSockets.get(channel);
-    if (!sockets) return;
+  const subscription = redisSubClientPromise.then(async (redisSubClient) => {
+    await redisSubClient.subscribe(channel, (message) => {
+      const sockets = connectedSockets.get(channel);
+      if (!sockets) return;
 
-    for (const ws of sockets) {
-      try {
+      for (const ws of sockets) {
+        try {
         ws.send(JSON.stringify({ channel, data: JSON.parse(message) }))
       } catch {
-        sockets.delete(ws)  // remove dead connection
+          sockets.delete(ws)  // remove dead connection
+        }
       }
-    }
+    })
   })
 
-
-  subscribedChannels.add(channel)
+  subscribedChannels.set(channel, subscription)
+  return subscription
 }
-
-

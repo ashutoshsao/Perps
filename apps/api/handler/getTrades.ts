@@ -3,7 +3,10 @@ import { Request, Response } from "express"
 
 export async function getTrades(req: Request, res: Response) {
   const symbol = req.params.symbol
-  const limit = parseInt(req.query.limit as string) ?? 50
+  const parsedLimit = parseInt(req.query.limit as string, 10)
+  const limit = Number.isFinite(parsedLimit)
+    ? Math.min(Math.max(parsedLimit, 1), 1000)
+    : 50
 
   try {
     const result = await timescale.query(

@@ -18,14 +18,16 @@ export function cancelOrder(payload: cancelOrderPayload) {
   let tree = order.side === "buy" ? orderbook.bids : orderbook.asks;
   let priceBracket = tree.get(order.price);
   if (!priceBracket) throw new Error("price priceBracket doesn't exist");
+  const restingOrder = priceBracket.find(o => o.orderId === orderId);
+  if (!restingOrder) throw new Error("resting order not found")
   const remaining = priceBracket.filter(o => o.orderId !== orderId)
   if (remaining.length === priceBracket.length) throw new Error("resting order not found")
   if (remaining.length === 0) tree.delete(order.price)
   else tree.set(order.price, remaining)
 
   //refund locked amount to available
-  const remainingQty = order.qty - order.filledQty;
   const usdBalance = fetchBalance(userId, "USD");
+  const remainingQty = restingOrder.qty - restingOrder.filledQty;
   const refund = Math.floor(Number(BigInt(remainingQty) * BigInt(order.price) / BigInt(order.leverage)));
   usdBalance.locked -= refund;
   usdBalance.available += refund;

@@ -3,6 +3,7 @@ CREATE EXTENSION IF NOT EXISTS timescaledb;
 
 -- raw fills hypertable for candle generation
 CREATE TABLE fills_ts (
+  fill_id TEXT        NOT NULL,
   time    TIMESTAMPTZ NOT NULL,
   symbol  TEXT        NOT NULL,
   price   BIGINT      NOT NULL,
@@ -11,6 +12,9 @@ CREATE TABLE fills_ts (
 );
 
 SELECT create_hypertable('fills_ts', 'time', if_not_exists => TRUE);
+
+CREATE UNIQUE INDEX fills_ts_fill_id_time_key ON fills_ts(fill_id, time);
+CREATE INDEX fills_ts_symbol_time_idx ON fills_ts(symbol, time DESC);
 
 -- 1m continuous aggregate
 CREATE MATERIALIZED VIEW candles_1m

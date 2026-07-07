@@ -1,11 +1,35 @@
+# OS/editor files
 .DS_Store
-node_modules
-.turbo
+.idea/
+.vscode/
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs and caches
+.turbo/
+.cache/
+dist/
+dist-ssr/
+out/
+coverage/
+*.tsbuildinfo
+server/dist/
+public/dist/
+packages/db/generated/
+packages/db/generated/prisma/
+
+# Logs
 *.log
-dist
-dist-ssr
-*.local
+logs/
+report.*.json
+
+# Environment files
 .env
-.cache
-server/dist
-public/dist
+.env.*
+**/.env
+**/.env.*
+*.local
+!**/.env.example
+!**/.env.*.example

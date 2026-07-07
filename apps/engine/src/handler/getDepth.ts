@@ -1,5 +1,5 @@
 import { GetDepthPayload } from "@repo/types";
-import { ORDERBOOKS } from "../engine-store";
+import { MARKET_UPDATE_IDS, ORDERBOOKS } from "../engine-store";
 
 export function getDepth(payload: GetDepthPayload) {
   const { symbol } = payload;
@@ -20,5 +20,5 @@ export function getDepth(payload: GetDepthPayload) {
     let totalQty = restingOrders.reduce((sum, o) => sum + (o.qty - o.filledQty), 0);
     bids.push([bidPrice, totalQty]);
   };
-  return { symbol, asks, bids };
+  return { symbol, asks, bids, lastUpdateId: MARKET_UPDATE_IDS.get(symbol) ?? 0 };
 }

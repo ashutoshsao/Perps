@@ -1,10 +1,10 @@
 import WebSocket, { WebSocketServer } from "ws";
 import { Env } from "./config";
 import { verifyUserChannel } from "./helper/verifyUserChannel";
-const wss = new WebSocketServer({ port: Env.PORT_WSS });
+import { connectedSockets } from "./channelRegistry";
+import { subscribeToChannel } from "./publishListener";
 
-//store connected clients in each channel;
-export const connectedSockets = new Map<string, Set<WebSocket>>();
+const wss = new WebSocketServer({ port: Env.PORT_WSS });
 
 wss.on("connection", (ws) => {
   ws.on("message", (data) => {
@@ -22,7 +22,18 @@ wss.on("connection", (ws) => {
         }
         connectedSockets.get(message.channel)!.add(ws);
 
-        //now this wss has to subscribe to redis pubsub this channel if haven't already
+        //now this wss has to subscribe to redis pubsub if haven't already
+        void subscribeToChannel(message.channel)
+          .then(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: "subscribed", channel: message.channel }))
+            }
+          })
+          .catch((err) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: "error", message: (err as Error).message }))
+            }
+          });
       }
       else {
         //unsubscribe from channel

@@ -60,6 +60,9 @@ async function loadAppEnv() {
   await loadEnvFile(`${WORKSPACE_ROOT}/packages/redis/.env`);
   await loadEnvFile(`${WORKSPACE_ROOT}/apps/engine/.env`);
   await loadEnvFile(`${WORKSPACE_ROOT}/apps/api/.env`);
+  await loadEnvFile(`${WORKSPACE_ROOT}/apps/tests/.env`);
+
+  process.env.REDIS_URL = process.env.TEST_REDIS_URL ?? "redis://localhost:6379/15";
 }
 
 function appEnv() {
@@ -128,6 +131,71 @@ async function post(path: string, body: unknown, headers: Record<string, string>
   };
 }
 
+async function del(path: string, headers: Record<string, string> = {}) {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: "DELETE",
+    headers,
+  });
+
+  const text = await response.text();
+  let json: unknown = null;
+  if (text) {
+    try {
+      json = JSON.parse(text);
+    } catch {
+      throw new Error(
+        `DELETE ${path} returned ${response.status} with a non-JSON body:\n${text}\n${processLogs.join("")}`,
+      );
+    }
+  }
+
+  return {
+    response,
+    json: json as any,
+  };
+}
+
+async function get(path: string, headers: Record<string, string> = {}) {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: "GET",
+    headers,
+  });
+
+  const text = await response.text();
+  let json: unknown = null;
+  if (text) {
+    try {
+      json = JSON.parse(text);
+    } catch {
+      throw new Error(
+        `GET ${path} returned ${response.status} with a non-JSON body:\n${text}\n${processLogs.join("")}`,
+      );
+    }
+  }
+
+  return {
+    response,
+    json: json as any,
+  };
+}
+
+async function waitFor<T>(callback: () => Promise<T | undefined>, timeoutMs = 5_000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastError: unknown;
+
+  while (Date.now() < deadline) {
+    try {
+      const result = await callback();
+      if (result !== undefined) return result;
+    } catch (error) {
+      lastError = error;
+    }
+    await Bun.sleep(100);
+  }
+
+  throw new Error(`Timed out waiting for condition: ${String(lastError)}\n${processLogs.join("")}`);
+}
+
 async function waitForApi() {
   const deadline = Date.now() + 15_000;
   let lastError: unknown;
@@ -165,6 +233,7 @@ describe("api integration", () => {
     }
 
     startProcess("engine", ["bun", "apps/engine/index.ts"]);
+    startProcess("db-puller", ["bun", "apps/db-puller/index.ts"]);
     startProcess("api", ["bun", "apps/api/index.ts"]);
     await waitForApi();
   }, 20_000);
@@ -234,6 +303,10 @@ describe("api integration", () => {
 
       expect(response.status).toBe(201);
       expect(json.marketId).toBeString();
+
+      const { response: marketsResponse, json: marketsJson } = await get("/markets");
+      expect(marketsResponse.status).toBe(200);
+      expect(marketsJson.markets.some((market: any) => market.symbol === marketSymbol)).toBe(true);
     });
 
     it("adds balance", async () => {
@@ -245,6 +318,13 @@ describe("api integration", () => {
 
       expect(response.status).toBe(200);
       expect(json.response.available).toBeGreaterThanOrEqual(100_000);
+
+      const { response: balanceResponse, json: balanceJson } = await get(
+        "/balance",
+        { authorization: `Bearer ${authToken}` },
+      );
+      expect(balanceResponse.status).toBe(200);
+      expect(balanceJson.response.available).toBeGreaterThanOrEqual(100_000);
     });
 
     it("places an unmatched limit order", async () => {
@@ -274,12 +354,28 @@ describe("api integration", () => {
         bids: [[100, 10]],
         asks: [],
       });
+
+      const { response: depthResponse, json: depthJson } = await get(`/depth/${marketSymbol}`);
+      expect(depthResponse.status).toBe(200);
+      expect(depthJson.bids).toEqual([[100, 10]]);
+      expect(depthJson.asks).toEqual([]);
+
+      await waitFor(async () => {
+        const { response: ordersResponse, json: ordersJson } = await get(
+          "/orders",
+          { authorization: `Bearer ${authToken}` },
+        );
+        expect(ordersResponse.status).toBe(200);
+
+        return ordersJson.orders.some((order: any) => order.id === apiRestingOrderId)
+          ? ordersJson
+          : undefined;
+      });
     });
 
     it("cancels a resting order through the API cancel route", async () => {
-      const { response, json } = await post(
+      const { response, json } = await del(
         `/order/${apiRestingOrderId}`,
-        {},
         { authorization: `Bearer ${authToken}` },
       );
 
@@ -293,6 +389,195 @@ describe("api integration", () => {
         prevUpdateId: 1,
         bids: [[100, 0]],
         asks: [],
+      });
+
+      await waitFor(async () => {
+        const { response: ordersResponse, json: ordersJson } = await get(
+          "/orders",
+          { authorization: `Bearer ${authToken}` },
+        );
+        expect(ordersResponse.status).toBe(200);
+
+        return ordersJson.orders.find((order: any) =>
+          order.id === apiRestingOrderId && order.status === "cancelled"
+        );
+      });
+    });
+
+    it("returns empty market-data arrays when no trades have printed", async () => {
+      const { response: tradesResponse, json: tradesJson } = await get(`/trades/${marketSymbol}`);
+      expect(tradesResponse.status).toBe(200);
+      expect(tradesJson.trades).toEqual([]);
+
+      const { response: klinesResponse, json: klinesJson } = await get(`/klines/${marketSymbol}`);
+      expect(klinesResponse.status).toBe(200);
+      expect(klinesJson.candles).toEqual([]);
+
+      const { response: tickerResponse } = await get(`/ticker/${marketSymbol}`);
+      expect(tickerResponse.status).toBe(404);
+    });
+
+    it("builds different OHLCV buckets from multiple fills per interval", async () => {
+      const { timescale } = await import("@repo/db");
+      const symbol = `KLINES-${crypto.randomUUID().slice(0, 8).toUpperCase()}-USD`;
+      const base = Date.UTC(2026, 5, 30, 10, 0, 0);
+      const rows = [
+        [crypto.randomUUID(), new Date(base + 5_000), symbol, 100, 1, "buy"],
+        [crypto.randomUUID(), new Date(base + 90_000), symbol, 110, 2, "buy"],
+        [crypto.randomUUID(), new Date(base + 6 * 60_000), symbol, 90, 3, "sell"],
+        [crypto.randomUUID(), new Date(base + 65 * 60_000), symbol, 120, 4, "buy"],
+        [crypto.randomUUID(), new Date(base + 24 * 60 * 60_000), symbol, 130, 5, "sell"],
+      ];
+
+      for (const row of rows) {
+        await timescale.query(
+          `INSERT INTO fills_ts (fill_id, time, symbol, price, qty, side)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          row,
+        );
+      }
+
+      const from = base - 60_000;
+      const to = base + 25 * 60 * 60_000;
+      const klinesPath = (interval: string) => `/klines/${symbol}?interval=${interval}&from=${from}&to=${to}`;
+
+      const oneMinute = await get(klinesPath("1m"));
+      expect(oneMinute.response.status).toBe(200);
+      expect(oneMinute.json.candles).toHaveLength(5);
+      expect(oneMinute.json.candles[0]).toMatchObject({
+        open: "100",
+        high: "100",
+        low: "100",
+        close: "100",
+        volume: "1",
+      });
+
+      const fiveMinute = await get(klinesPath("5m"));
+      expect(fiveMinute.response.status).toBe(200);
+      expect(fiveMinute.json.candles).toHaveLength(4);
+      expect(fiveMinute.json.candles[0]).toMatchObject({
+        open: "100",
+        high: "110",
+        low: "100",
+        close: "110",
+        volume: "3",
+      });
+
+      const oneHour = await get(klinesPath("1h"));
+      expect(oneHour.response.status).toBe(200);
+      expect(oneHour.json.candles).toHaveLength(3);
+      expect(oneHour.json.candles[0]).toMatchObject({
+        open: "100",
+        high: "110",
+        low: "90",
+        close: "90",
+        volume: "6",
+      });
+
+      const oneDay = await get(klinesPath("1d"));
+      expect(oneDay.response.status).toBe(200);
+      expect(oneDay.json.candles).toHaveLength(2);
+      expect(oneDay.json.candles[0]).toMatchObject({
+        open: "100",
+        high: "120",
+        low: "90",
+        close: "120",
+        volume: "10",
+      });
+    });
+
+    it("persists matched fills and exposes them as recent trades", async () => {
+      const restingSell = await post(
+        "/order",
+        {
+          orderType: "limit",
+          side: "sell",
+          price: 120,
+          qty: 2,
+          leverage: 1,
+          symbol: marketSymbol,
+        },
+        { authorization: `Bearer ${authToken}` },
+      );
+      expect(restingSell.response.status).toBe(200);
+
+      const marketBuy = await post(
+        "/order",
+        {
+          orderType: "market",
+          side: "buy",
+          qty: 2,
+          leverage: 1,
+          slippageBps: 10_000,
+          symbol: marketSymbol,
+        },
+        { authorization: `Bearer ${authToken}` },
+      );
+      expect(marketBuy.response.status).toBe(200);
+      expect(marketBuy.json.fills).toHaveLength(1);
+
+      const fillId = marketBuy.json.fills[0].fillId;
+
+      await waitFor(async () => {
+        const { response: fillsResponse, json: fillsJson } = await get(
+          "/fills",
+          { authorization: `Bearer ${authToken}` },
+        );
+        expect(fillsResponse.status).toBe(200);
+
+        const fill = fillsJson.fills.find((fill: any) => fill.id === fillId);
+        if (!fill) return undefined;
+
+        expect(fill).toMatchObject({
+          id: fillId,
+          symbol: marketSymbol,
+          makerSide: "sell",
+          side: "sell",
+        });
+        return fill;
+      });
+
+      await waitFor(async () => {
+        const { response: ordersResponse, json: ordersJson } = await get(
+          "/orders",
+          { authorization: `Bearer ${authToken}` },
+        );
+        expect(ordersResponse.status).toBe(200);
+
+        return ordersJson.orders.find((order: any) =>
+          order.id === restingSell.json.order.orderId &&
+          order.status === "filled" &&
+          order.filledQty === 2
+        );
+      });
+
+      await waitFor(async () => {
+        const { response: ordersResponse, json: ordersJson } = await get(
+          "/orders",
+          { authorization: `Bearer ${authToken}` },
+        );
+        expect(ordersResponse.status).toBe(200);
+        expect(ordersJson.orders.some((order: any) =>
+          order.id === restingSell.json.order.orderId &&
+          (order.status === "open" || order.status === "partially_filled")
+        )).toBe(false);
+
+        return ordersJson.orders.find((order: any) =>
+          order.id === restingSell.json.order.orderId &&
+          order.status === "filled"
+        );
+      });
+
+      await waitFor(async () => {
+        const { response: tradesResponse, json: tradesJson } = await get(`/trades/${marketSymbol}`);
+        expect(tradesResponse.status).toBe(200);
+
+        return tradesJson.trades.find((trade: any) =>
+          trade.symbol === marketSymbol &&
+          Number(trade.price) === 120 &&
+          Number(trade.qty) === 2 &&
+          trade.side === "buy"
+        );
       });
     });
   });
@@ -368,6 +653,7 @@ describe("engine commands", () => {
 
     expect(engineCommand("get_depth", { symbol: "DEPTH-USD" })).toEqual({
       symbol: "DEPTH-USD",
+      lastUpdateId: 4,
       asks: [
         [100, 2],
         [110, 3],
@@ -386,8 +672,8 @@ describe("engine commands", () => {
       maxLeverage: 10,
       minQty: 1,
     });
-    engineCommand("add_balance", { userId: "seller", amount: 10_000 });
-    engineCommand("add_balance", { userId: "buyer", amount: 10_000 });
+    engineCommand("add_balance", { userId: "seller", amount: 20_000 });
+    engineCommand("add_balance", { userId: "buyer", amount: 20_000 });
 
     const makerOrder = engineCommand("create_order", {
       userId: "seller",
@@ -445,6 +731,45 @@ describe("engine commands", () => {
       averagePrice: 100,
     });
     expect(engineCommand("get_depth", { symbol: "MATCH-USD" }).asks).toEqual([[100, 6]]);
+  });
+
+  it("applies market slippage bps around the best price", () => {
+    engineCommand("create_market", {
+      marketId: "slippage-market",
+      symbol: "SLIPPAGE-USD",
+      maxLeverage: 10,
+      minQty: 1,
+    });
+    engineCommand("add_balance", { userId: "seller", amount: 20_000 });
+    engineCommand("add_balance", { userId: "buyer", amount: 20_000 });
+
+    engineCommand("create_order", {
+      userId: "seller",
+      symbol: "SLIPPAGE-USD",
+      orderType: "limit",
+      side: "sell",
+      price: 6_000,
+      qty: 2,
+      leverage: 1,
+    });
+    const marketOrder = engineCommand("create_order", {
+      userId: "buyer",
+      symbol: "SLIPPAGE-USD",
+      orderType: "market",
+      side: "buy",
+      qty: 2,
+      leverage: 1,
+      slippageBps: 100,
+    });
+
+    expect(marketOrder.order.price).toBe(6_060);
+    expect(marketOrder.order.status).toBe("filled");
+    expect(marketOrder.order.filledQty).toBe(2);
+    expect(marketOrder.fills[0]).toMatchObject({
+      price: 6_000,
+      qty: 2,
+      symbol: "SLIPPAGE-USD",
+    });
   });
 
   it("rejects orders that violate market limits or have no market liquidity", () => {
@@ -575,6 +900,7 @@ describe("engine commands", () => {
     });
     expect(engineCommand("get_depth", { symbol: "PRICE-IMPROVEMENT-USD" })).toEqual({
       symbol: "PRICE-IMPROVEMENT-USD",
+      lastUpdateId: 2,
       asks: [],
       bids: [[110, 3]],
     });

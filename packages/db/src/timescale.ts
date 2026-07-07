@@ -5,6 +5,7 @@ export const timescale = new Pool({
 })
 
 export async function insertFill(
+  fillId: string,
   symbol: string,
   price: number,
   qty: number,
@@ -12,8 +13,9 @@ export async function insertFill(
   createdAt: number
 ) {
   await timescale.query(
-    `INSERT INTO fills_ts (time, symbol, price, qty, side)
-     VALUES (to_timestamp($1 / 1000.0), $2, $3, $4, $5)`,
-    [createdAt, symbol, price, qty, side]
+    `INSERT INTO fills_ts (fill_id, time, symbol, price, qty, side)
+     VALUES ($1, to_timestamp($2 / 1000.0), $3, $4, $5, $6)
+     ON CONFLICT (fill_id, time) DO NOTHING`,
+    [fillId, createdAt, symbol, price, qty, side]
   )
 }

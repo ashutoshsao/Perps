@@ -28,7 +28,7 @@ export const CreateOrderApiSchema = z.discriminatedUnion("orderType", [
     side,
     qty: int,
     leverage: int.min(1),
-    slippageBps: int.min(0),
+    slippageBps: int.min(0).max(10000),
     symbol: z.string().min(1),
   }),
 ])

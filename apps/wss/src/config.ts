@@ -1,4 +1,3 @@
-
 function getEnv(envName: string) {
   const env = process.env[envName];
   if (!env) throw new Error(`backend env ${envName} not present`);

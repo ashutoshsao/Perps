@@ -107,6 +107,14 @@ export const cancelOrder = async (req: Request, res: Response) => {
     const response = await loopback("cancel_order", { userId, orderId })
     res.status(200).json(response)
   } catch (error) {
-    res.status(400).json({ error: (error as Error).message })
+    const message = (error as Error).message;
+    if (message.toLowerCase().includes("doesn't exist")) {
+      console.error("Cancel requested for DB-projected order missing from engine", {
+        orderId,
+        userId,
+        error: message,
+      });
+    }
+    res.status(400).json({ error: message })
   }
 }
