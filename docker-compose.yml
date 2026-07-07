@@ -1,0 +1,125 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_USER: perps
+      POSTGRES_PASSWORD: perps
+      POSTGRES_DB: perps
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescaledb-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U perps -d perps"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build:
+      context: .
+      dockerfile: packages/db/Dockerfile
+    env_file:
+      - .env.docker
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+
+  engine:
+    build:
+      context: .
+      dockerfile: apps/engine/Dockerfile
+    env_file:
+      - .env.docker
+    volumes:
+      - engine-snapshots:/app/data/snapshots
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    env_file:
+      - .env.docker
+    ports:
+      - "4000:4000"
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  price-feeder:
+    build:
+      context: .
+      dockerfile: apps/price-feeder/Dockerfile
+    env_file:
+      - .env.docker
+    depends_on:
+      redis:
+        condition: service_healthy
+      engine:
+        condition: service_started
+    restart: unless-stopped
+
+  db-puller:
+    build:
+      context: .
+      dockerfile: apps/db-puller/Dockerfile
+    env_file:
+      - .env.docker
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  wss:
+    build:
+      context: .
+      dockerfile: apps/wss/Dockerfile
+    env_file:
+      - .env.docker
+    ports:
+      - "3030:3030"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    env_file:
+      - .env.docker
+    ports:
+      - "5173:5173"
+    depends_on:
+      api:
+        condition: service_started
+      wss:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  timescaledb-data:
+  engine-snapshots:
