@@ -1,5 +1,11 @@
 import type { UserFill } from "../../api/types";
-import type { DerivedPosition } from "../../app/types";
+
+export type DerivedPosition = {
+  symbol: string;
+  side: "long" | "short";
+  qty: number;
+  averagePrice: number;
+};
 
 export function derivePositions(fills: UserFill[]) {
   const bySymbol = new Map<string, { signedQty: number; averagePrice: number }>();

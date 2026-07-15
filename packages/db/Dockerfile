@@ -11,4 +11,4 @@ RUN cd packages/db && bunx prisma generate
 
 WORKDIR /app/packages/db
 
-CMD ["bunx", "prisma", "migrate", "deploy"]
+CMD ["sh", "-c", "bunx prisma migrate deploy && bun run seed"]

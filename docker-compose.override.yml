@@ -1,0 +1,19 @@
+services:
+  web:
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/apps/web/node_modules
+      - /app/apps/api/node_modules
+      - /app/apps/db-puller/node_modules
+      - /app/apps/engine/node_modules
+      - /app/apps/price-feeder/node_modules
+      - /app/apps/tests/node_modules
+      - /app/apps/wss/node_modules
+      - /app/packages/db/node_modules
+      - /app/packages/eslint-config/node_modules
+      - /app/packages/redis/node_modules
+      - /app/packages/types/node_modules
+      - /app/packages/ui/node_modules

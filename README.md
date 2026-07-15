@@ -80,7 +80,7 @@ apps/
   engine/        Matching engine, risk logic, snapshots, command dispatcher
   price-feeder/  Binance mark-price feed for index prices and liquidation checks
   tests/         Bun tests covering API + engine behavior
-  web/           Vite shell from the original workspace scaffold
+  web/           Vite + React exchange UI
 
 packages/
   db/            Prisma client and Postgres schema for users, markets, orders, fills
@@ -289,7 +289,7 @@ This is a prototype, not a production exchange.
 - The matching engine is single-process and in-memory.
 - The database order/fill schema exists, but engine fills are not fully persisted back to Postgres yet.
 - The price feeder currently logs Binance mark prices rather than publishing `update_index_price` commands into Redis.
-- The web app is still a Vite shell.
+- The web app (`apps/web`) is a fresh Vite + React scaffold, still under active development.
 - Some exchange mechanics are simplified: liquidation math, insurance funds, fees, realized PnL, bankruptcy prices, and full ADL ranking are not production-grade.
 - There are a few implementation rough edges visible in the current code, such as the cancel endpoint dispatching the wrong command type and funding scheduling using a typo in the response queue field. These are useful next cleanup targets.
 

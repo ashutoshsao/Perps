@@ -1,7 +1,7 @@
 {
   "name": "web",
+  "version": "0.1.0",
   "private": true,
-  "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite --clearScreen false",
@@ -10,18 +10,17 @@
     "lint": "eslint \"src/**/*.{ts,tsx}\""
   },
   "dependencies": {
-    "@repo/ui": "*",
     "@tailwindcss/vite": "^4.3.2",
     "lightweight-charts": "^5.2.0",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
+    "react": "^19",
+    "react-dom": "^19",
     "tailwindcss": "^4.3.2"
   },
   "devDependencies": {
     "@repo/eslint-config": "*",
     "@repo/typescript-config": "*",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
     "@vitejs/plugin-react": "4.3.4",
     "eslint": "^8.57.0",
     "typescript": "5.5.4",

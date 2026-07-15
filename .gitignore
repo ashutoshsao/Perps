@@ -25,6 +25,10 @@ packages/db/generated/prisma/
 logs/
 report.*.json
 
+# Runtime snapshot data
+data/snapshots/*
+!data/snapshots/.gitkeep
+
 # Environment files
 .env
 .env.*

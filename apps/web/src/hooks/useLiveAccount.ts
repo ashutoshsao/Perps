@@ -4,7 +4,7 @@ import { subscribeChannel } from "../ws/client";
 
 const MAX_ROWS = 80;
 
-function decodeUserId(token: string | null) {
+export function decodeUserId(token: string | null) {
   if (!token) return null;
 
   try {

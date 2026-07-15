@@ -6,7 +6,8 @@
   },
   "license": "MIT",
   "scripts": {
-    "lint": "eslint \"**/*.ts\""
+    "lint": "eslint \"**/*.ts\"",
+    "seed": "bun prisma/seed.ts"
   },
   "devDependencies": {
     "@repo/eslint-config": "*",
@@ -20,6 +21,7 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
+    "argon2": "^0.44.0",
     "dotenv": "^17.4.2",
     "pg": "^8.21.0",
     "zod": "^4.4.3"

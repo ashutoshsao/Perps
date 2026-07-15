@@ -1,6 +1,19 @@
-import type { AuthResponse, Balance, Candle, CreateMarketPayload, Depth, Market, OrderMutationResponse, OrderPayload, Ticker, Trade, UserFill, UserOrder } from "./types";
+import type {
+  AuthResponse,
+  Balance,
+  Candle,
+  CreateMarketPayload,
+  Depth,
+  Market,
+  OrderMutationResponse,
+  OrderPayload,
+  Ticker,
+  Trade,
+  UserFill,
+  UserOrder,
+} from "./types";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "/api";
+const API_URL = import.meta.env?.VITE_API_URL ?? "/api";
 
 type RequestOptions = {
   token?: string | null;

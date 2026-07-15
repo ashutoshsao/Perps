@@ -1,5 +1,5 @@
 import type { Market, Ticker } from "../api/types";
-import { primaryMarketOrder } from "../app/constants";
+import { primaryMarketOrder } from "./constants";
 import { formatNumber } from "./format";
 
 export function sortMarkets(markets: Market[]) {
@@ -30,21 +30,7 @@ export function formatPerpSymbol(symbol: string) {
   return base;
 }
 
-export function formatPairSymbol(_symbol: string) {
-  return "PERPETUAL";
-}
-
-export function getMarketSearchAliases(symbol: string) {
-  const { base, quote } = splitMarketSymbol(symbol);
-  return [
-    base,
-    `${base}-perp`,
-    `${base}/${quote}`.toLowerCase(),
-    "perpetual",
-  ];
-}
-
-export function formatMarkPrice(markPrice: number | undefined, _ticker: Ticker | null, _fallback: string) {
+export function formatMarkPrice(markPrice: number | undefined) {
   if (typeof markPrice === "number") return formatNumber(markPrice / 1_000_000);
   return "-";
 }

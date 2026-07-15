@@ -90,7 +90,11 @@ export function useDepthSync(symbol: string | null): DepthSyncState {
       },
       onClose() {
         socketReadyRef.current = false;
+        if (cancelled) return;
+        snapshotReadyRef.current = false;
+        bufferRef.current = [];
         setState((current) => ({ ...current, status: current.depth ? "connecting" : current.status }));
+        void loadSnapshot();
       },
       onError(message) {
         setState((current) => ({ ...current, status: "error", error: message }));

@@ -35,6 +35,7 @@ export function useAsyncData<T>(loader: () => Promise<T>, dependencies: unknown[
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, dependencies);
 
   return state;

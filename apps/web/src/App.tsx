@@ -1,42 +1,53 @@
-import { useEffect, useState } from "react";
-import type { Route } from "./app/types";
-import { AUTH_TOKEN_KEY } from "./app/constants";
-import { getRouteFromLocation, getStoredToken, navigate } from "./app/navigation";
-import { AdminScreen } from "./screens/AdminScreen";
-import { AuthScreen } from "./screens/AuthScreen";
-import { ExchangeShell } from "./screens/ExchangeShell";
-import { WalletScreen } from "./screens/WalletScreen";
+import "./index.css";
+
+import { TopNav } from "./components/layout/TopNav";
+import { MarketStrip } from "./components/layout/MarketStrip";
+import { BottomPanel } from "./components/layout/BottomPanel";
+import { FooterTicker } from "./components/layout/FooterTicker";
+import { ChartPanel } from "./features/chart/ChartPanel";
+import { OrderBookPanel } from "./features/orderbook/OrderBookPanel";
+import { OrderTicketPanel } from "./features/ticket/OrderTicketPanel";
+import { AuthModal } from "./components/auth/AuthModal";
+import { ToastProvider } from "./context/ToastContext";
+import { AuthProvider } from "./context/AuthContext";
+import { MarketProvider } from "./context/MarketContext";
+import { TradingProvider } from "./context/TradingContext";
+import { OrdersProvider } from "./context/OrdersContext";
+import { TicketProvider } from "./context/TicketContext";
 
 export function App() {
-  const [route, setRoute] = useState<Route>(getRouteFromLocation);
-  const [token, setToken] = useState<string | null>(getStoredToken);
+  return (
+    <ToastProvider>
+      <AuthProvider>
+        <MarketProvider>
+          <TradingProvider>
+            <OrdersProvider>
+              <TicketProvider>
+                <div className="flex h-screen min-w-[1200px] flex-col bg-bg text-text">
+                  <TopNav />
+                  <MarketStrip />
 
-  useEffect(() => {
-    if (window.location.hash.startsWith("#/")) {
-      const initialRoute = getRouteFromLocation();
-      window.history.replaceState(null, "", initialRoute === "trade" ? "/" : "/" + initialRoute);
-    }
+                  <div className="flex min-h-0 flex-1">
+                    <div className="flex min-h-0 flex-1 flex-col">
+                      <div className="flex min-h-0 flex-1">
+                        <ChartPanel />
+                        <OrderBookPanel />
+                      </div>
+                      <BottomPanel />
+                    </div>
+                    <OrderTicketPanel />
+                  </div>
 
-    const onLocationChange = () => setRoute(getRouteFromLocation());
-    window.addEventListener("popstate", onLocationChange);
-    return () => window.removeEventListener("popstate", onLocationChange);
-  }, []);
-
-  function handleAuth(tokenValue: string) {
-    window.localStorage.setItem(AUTH_TOKEN_KEY, tokenValue);
-    setToken(tokenValue);
-    navigate("trade");
-  }
-
-  function handleSignOut() {
-    window.localStorage.removeItem(AUTH_TOKEN_KEY);
-    setToken(null);
-    navigate("signin");
-  }
-
-  if (route === "signin") return <AuthScreen mode="signin" onAuth={handleAuth} />;
-  if (route === "signup") return <AuthScreen mode="signup" onAuth={handleAuth} />;
-  if (route === "wallet") return <WalletScreen token={token} onSignOut={handleSignOut} />;
-  if (route === "admin") return <AdminScreen token={token} onSignOut={handleSignOut} />;
-  return <ExchangeShell token={token} onSignOut={handleSignOut} />;
+                  <FooterTicker />
+                </div>
+                <AuthModal />
+              </TicketProvider>
+            </OrdersProvider>
+          </TradingProvider>
+        </MarketProvider>
+      </AuthProvider>
+    </ToastProvider>
+  );
 }
+
+export default App;
