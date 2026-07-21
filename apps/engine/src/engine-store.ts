@@ -7,3 +7,6 @@ export const FILLS = new Map<string, Fill[]>();
 export const MARKETS = new Map<string, Market>();
 export const INDEX_PRICES = new Map<string, number>()
 export const MARKET_UPDATE_IDS = new Map<string, number>()
+export const FUNDING_RATE_ACCOUMILATOR = new Map<string, { sumPremium: number, samples: number }>
+export const MARK_PRICE_EWMA = new Map<string, number>
+export const LAST_FUNDING = new Map<string, number>

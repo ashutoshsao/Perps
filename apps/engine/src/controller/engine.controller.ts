@@ -10,16 +10,16 @@ import { fundingRate } from "../handler/fundingRate";
 import { getMarkets } from "../handler/getMarkets";
 
 export function handleCommand(request: EngineRequest) {
-  const { type, payload } = request;
+  const { type, payload, streamMsgId } = request;
   switch (type) {
     case "create_order":
-      return createOrder(payload as createOrderPayload);
+      return createOrder(payload as createOrderPayload, streamMsgId);
     case "cancel_order":
       return cancelOrder(payload as cancelOrderPayload);
     case "create_market":
       return createMarket(payload as CreateMarketPayload);
     case "update_index_price":
-      return updateIndexPrice(payload as updateIndexPricePayload);
+      return updateIndexPrice(payload as updateIndexPricePayload, streamMsgId);
     case "add_balance":
       return addBalance(payload as addBalancePayload);
     case "get_balance":
@@ -27,7 +27,7 @@ export function handleCommand(request: EngineRequest) {
     case "get_depth":
       return getDepth(payload as GetDepthPayload);
     case "funding_rate":
-      return fundingRate();
+      return fundingRate(streamMsgId);
     case "get_markets":
       return getMarkets();
     default: throw new Error("unknown command")

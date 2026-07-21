@@ -6,6 +6,7 @@ const readClient = getRedisClient()
 const writeClient = getRedisClient()
 type RedisClient = Awaited<ReturnType<typeof getRedisClient>>
 const GLOBAL_EVENTS = new Set([
+  "funding_rate",
   "create_order",
   "cancel_order",
   "create_market"
@@ -42,6 +43,7 @@ async function startUp() {
         const { correlationId, type, responseQueue, payload } = msg.message
         try {
           const request: EngineRequest = {
+            streamMsgId: msg.id,
             correlationId,
             type: type as EngineRequest['type'],
             responseQueue,

@@ -199,7 +199,7 @@ The Docker setup provides:
 Docker-specific environment variables live in `.env.docker`. Inside Docker, service-to-service URLs use container hostnames:
 
 ```sh
-DATABASE_URL=postgresql://perps:perps@timescaledb:5432/perps
+DATABASE_URL=postgresql://postgres:password@timescaledb:5432/perp
 REDIS_URL=redis://redis:6379
 ```
 

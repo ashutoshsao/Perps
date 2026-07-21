@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import type { EngineCommandType, EngineRequest } from "@repo/types";
 import { handleCommand } from "../engine/src/controller/engine.controller";
-import { BALANCES, FILLS, INDEX_PRICES, MARKET_UPDATE_IDS, MARKETS, ORDERBOOKS, ORDERS, POSITIONS } from "../engine/src/engine-store";
+import { BALANCES, FILLS, FUNDING_RATE_ACCOUMILATOR, INDEX_PRICES, LAST_FUNDING, MARK_PRICE_EWMA, MARKET_UPDATE_IDS, MARKETS, ORDERBOOKS, ORDERS, POSITIONS } from "../engine/src/engine-store";
 import { newMarket, subscribedMarkets } from "../price-feeder/src/helper/newMarket";
 
 const WORKSPACE_ROOT = `${import.meta.dir}/../..`;
@@ -18,8 +18,16 @@ let authToken = "";
 let marketSymbol = "";
 let apiRestingOrderId = "";
 
+let streamMsgCounter = 0;
+
+function nextStreamMsgId() {
+  streamMsgCounter += 1;
+  return `${Date.now()}-${streamMsgCounter}`;
+}
+
 function engineCommand(type: EngineCommandType, payload: unknown = {}) {
   return handleCommand({
+    streamMsgId: nextStreamMsgId(),
     correlationId: crypto.randomUUID(),
     responseQueue: "test-response-queue",
     type,
@@ -36,6 +44,9 @@ function resetEngineStore() {
   ORDERBOOKS.clear();
   ORDERS.clear();
   POSITIONS.clear();
+  FUNDING_RATE_ACCOUMILATOR.clear();
+  MARK_PRICE_EWMA.clear();
+  LAST_FUNDING.clear();
 }
 
 async function loadEnvFile(path: string) {
@@ -964,12 +975,125 @@ describe("engine commands", () => {
     expect(INDEX_PRICES.get("INDEX-USD")).toBe(123);
     expect(() =>
       handleCommand({
+        streamMsgId: nextStreamMsgId(),
         correlationId: crypto.randomUUID(),
         responseQueue: "test-response-queue",
         type: "does_not_exist" as EngineCommandType,
         payload: {} as EngineRequest["payload"],
       }),
     ).toThrow("unknown command");
+  });
+
+  it("settles funding across every market using the accumulated premium average", () => {
+    for (const symbol of ["FUNDING-A-USD", "FUNDING-B-USD"]) {
+      engineCommand("create_market", {
+        marketId: `${symbol}-market`,
+        symbol,
+        maxLeverage: 10,
+        minQty: 1,
+      });
+      engineCommand("add_balance", { userId: `${symbol}-seller`, amount: 20_000 });
+      engineCommand("add_balance", { userId: `${symbol}-buyer`, amount: 20_000 });
+
+      engineCommand("create_order", {
+        userId: `${symbol}-seller`,
+        symbol,
+        orderType: "limit",
+        side: "sell",
+        price: 100,
+        qty: 10,
+        leverage: 1,
+      });
+      engineCommand("create_order", {
+        userId: `${symbol}-buyer`,
+        symbol,
+        orderType: "market",
+        side: "buy",
+        qty: 10,
+        leverage: 1,
+        slippageBps: 10_000,
+      });
+
+      // two index-price ticks so the accumulator has more than one sample to average
+      engineCommand("update_index_price", { symbol, price: 99 });
+      engineCommand("update_index_price", { symbol, price: 99 });
+    }
+
+    const buyerMarginBefore = POSITIONS.get("FUNDING-A-USD-buyer")?.get("FUNDING-A-USD")!.margin;
+    const sellerMarginBefore = POSITIONS.get("FUNDING-A-USD-seller")?.get("FUNDING-A-USD")!.margin;
+
+    const response = engineCommand("funding_rate", {});
+    const settlements = response.settlements as Array<{ symbol: string; userId: string; rate: number; settledAt: number }>;
+
+    // both markets settled — proves the multi-market loop isn't cut short
+    expect(settlements.some((s) => s.symbol === "FUNDING-A-USD")).toBe(true);
+    expect(settlements.some((s) => s.symbol === "FUNDING-B-USD")).toBe(true);
+    expect(settlements.length).toBe(4); // buyer + seller for each of the 2 markets
+
+    for (const settlement of settlements) {
+      // averaged premium, not the extreme instantaneous value, and within the clamp
+      expect(Math.abs(settlement.rate)).toBeLessThanOrEqual(0.0075);
+      expect(settlement.settledAt).toBeNumber();
+    }
+
+    // long pays short (index below last traded price) — margin should move in opposite directions
+    const buyerMarginAfter = POSITIONS.get("FUNDING-A-USD-buyer")?.get("FUNDING-A-USD")!.margin;
+    const sellerMarginAfter = POSITIONS.get("FUNDING-A-USD-seller")?.get("FUNDING-A-USD")!.margin;
+    expect(buyerMarginAfter).toBeLessThan(buyerMarginBefore!);
+    expect(sellerMarginAfter).toBeGreaterThan(sellerMarginBefore!);
+
+    // accumulator resets after settlement
+    expect(FUNDING_RATE_ACCOUMILATOR.get("FUNDING-A-USD")).toEqual({ sumPremium: 0, samples: 0 });
+    expect(LAST_FUNDING.get("FUNDING-A-USD")).toBe(
+      settlements.find((s) => s.symbol === "FUNDING-A-USD")!.rate,
+    );
+  });
+
+  it("falls back to the last settled rate when no index-price ticks occurred this window", () => {
+    engineCommand("create_market", {
+      marketId: "funding-fallback-market",
+      symbol: "FUNDING-FALLBACK-USD",
+      maxLeverage: 10,
+      minQty: 1,
+    });
+    engineCommand("add_balance", { userId: "fallback-seller", amount: 20_000 });
+    engineCommand("add_balance", { userId: "fallback-buyer", amount: 20_000 });
+
+    engineCommand("create_order", {
+      userId: "fallback-seller",
+      symbol: "FUNDING-FALLBACK-USD",
+      orderType: "limit",
+      side: "sell",
+      price: 100,
+      qty: 10,
+      leverage: 1,
+    });
+    engineCommand("create_order", {
+      userId: "fallback-buyer",
+      symbol: "FUNDING-FALLBACK-USD",
+      orderType: "market",
+      side: "buy",
+      qty: 10,
+      leverage: 1,
+      slippageBps: 10_000,
+    });
+
+    engineCommand("update_index_price", { symbol: "FUNDING-FALLBACK-USD", price: 99 });
+
+    const first = engineCommand("funding_rate", {});
+    const firstRate = first.settlements.find(
+      (s: { symbol: string }) => s.symbol === "FUNDING-FALLBACK-USD",
+    ).rate;
+
+    // no new update_index_price ticks before the second settlement — accumulator is empty
+    expect(FUNDING_RATE_ACCOUMILATOR.get("FUNDING-FALLBACK-USD")).toEqual({ sumPremium: 0, samples: 0 });
+
+    const second = engineCommand("funding_rate", {});
+    const secondRate = second.settlements.find(
+      (s: { symbol: string }) => s.symbol === "FUNDING-FALLBACK-USD",
+    ).rate;
+
+    expect(secondRate).toBe(firstRate);
   });
 });
 

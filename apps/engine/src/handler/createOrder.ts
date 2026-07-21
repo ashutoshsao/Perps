@@ -5,7 +5,7 @@ import { matchOrder } from "../helper/matchOrder";
 import { updatePosition } from "../helper/updatePosition";
 import { getDepthDiff } from "../helper/getDepthDiff";
 
-export function createOrder(payload: createOrderPayload) {
+export function createOrder(payload: createOrderPayload, streamMsgId: string, orderIdSuffix: string = "taker") {
   const { userId, symbol, side, orderType, leverage, qty } = payload;
 
   let orderbook = ORDERBOOKS.get(symbol);
@@ -46,7 +46,7 @@ export function createOrder(payload: createOrderPayload) {
   usdBalance.locked += margin;
 
   const order: OrderRecord = {
-    orderId: crypto.randomUUID(),
+    orderId: `${streamMsgId}-${orderIdSuffix}`,
     marketId: market.marketId,
     userId,
     side,
@@ -59,10 +59,12 @@ export function createOrder(payload: createOrderPayload) {
     margin,
     status: "open",
     fills: [],
+    createdAt: parseInt(`${streamMsgId.split('-')[0]}`)
   }
+
   ORDERS.set(order.orderId, order);
 
-  const { fills, remainingQty, totalCost, touchedAskPrices, touchedBidPrices } = matchOrder(limitPrice, order);
+  const { fills, remainingQty, totalCost, touchedAskPrices, touchedBidPrices } = matchOrder(limitPrice, order, streamMsgId);
 
   for (const fill of fills) {
 

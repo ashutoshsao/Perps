@@ -1,7 +1,7 @@
 import { Fill, OrderRecord } from "@repo/types";
 import { ORDERBOOKS } from "../engine-store";
 
-export function matchOrder(limitPrice: number, order: OrderRecord) {
+export function matchOrder(limitPrice: number, order: OrderRecord, streamMsgId: string) {
   let orderbook = ORDERBOOKS.get(order.symbol);
   if (!orderbook) throw new Error(`Market ${order.symbol} doesn't exist`);
 
@@ -23,7 +23,7 @@ export function matchOrder(limitPrice: number, order: OrderRecord) {
         const fillQty = Math.min(remainingFillQty, remainingQty);
 
         fills.push({
-          fillId: crypto.randomUUID(),
+          fillId: `${order.orderId}-fill-${restingOrder.orderId}`,
           symbol: order.symbol,
           qty: fillQty,
           price: askPrice,
@@ -32,9 +32,10 @@ export function matchOrder(limitPrice: number, order: OrderRecord) {
           makerUserId: restingOrder.userId,
           takerUserId: order.userId,
           makerSide: "sell",
-          createdAt: Date.now()
+          createdAt: parseInt(`${streamMsgId.split('-')[0]}`)
         })
-
+        //update lastTradedPrice
+        orderbook.lastTradedPrice = askPrice;
         restingOrder.filledQty += fillQty;
         remainingQty -= fillQty;
         totalCost += fillQty * askPrice;
@@ -65,7 +66,7 @@ export function matchOrder(limitPrice: number, order: OrderRecord) {
 
         fills.push({
           symbol: order.symbol,
-          fillId: crypto.randomUUID(),
+          fillId: `${order.orderId}-fill-${restingOrder.orderId}`,
           qty: fillQty,
           price: bidPrice,
           makerOrderId: restingOrder.orderId,
@@ -73,8 +74,11 @@ export function matchOrder(limitPrice: number, order: OrderRecord) {
           makerUserId: restingOrder.userId,
           takerUserId: order.userId,
           makerSide: "buy",
-          createdAt: Date.now()
+          createdAt: parseInt(`${streamMsgId.split('-')[0]}`)
         })
+
+        //update lastTradedPrice
+        orderbook.lastTradedPrice = bidPrice;
 
         restingOrder.filledQty += fillQty;
         remainingQty -= fillQty;

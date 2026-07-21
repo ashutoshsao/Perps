@@ -2,7 +2,7 @@ import { Position } from "@repo/types";
 import { INDEX_PRICES, POSITIONS } from "../engine-store";
 import { createOrder } from "../handler/createOrder";
 
-export function adl(position: Position) {
+export function adl(position: Position, streamMsgId: string) {
   const oppositeSide = position.positionSide === "long" ? "short" : "long";
   const markPrice = INDEX_PRICES.get(position.symbol)!;
   const candidates: { userId: string, pos: Position, pnl: number }[] = []
@@ -38,7 +38,7 @@ export function adl(position: Position) {
       qty: fillQty,
       leverage: Math.floor((candidate.pos.averagePrice * candidate.pos.qty) / candidate.pos.margin),
       slippageBps: 10000
-    });
+    }, streamMsgId, `adl-${position.symbol}-${candidate.userId}`);
 
   }
   if (remainingQty > 0) {

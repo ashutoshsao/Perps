@@ -76,6 +76,17 @@ export type OrderRecord = {
   leverage: number,
   price: number,
   fills: Fill[]
+  createdAt: number
+}
+
+export interface Settlements {
+  userId: string,
+  symbol: string,
+  rate: number,
+  payment: number,
+  marginAfter: number,
+  liquidationPriceAfter: number
+  settledAt: number
 }
 
 export type Position = {
@@ -160,6 +171,7 @@ export type EnginePayload =
   | updateIndexPricePayload
 
 export interface EngineRequest {
+  streamMsgId: string,
   correlationId: string,
   type: EngineCommandType,
   payload: EnginePayload,
