@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
-import { BackpackLogo } from "../../icons";
+import { NebulaLogo } from "../../icons";
 
 const DEMO_DEPOSIT_AMOUNT = 10000;
 
@@ -88,8 +88,8 @@ export function AuthModal() {
       >
         <div className="mb-5 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <BackpackLogo size={24} />
-            <span className="text-[16px] font-bold text-text">Backpack</span>
+            <NebulaLogo size={24} />
+            <span className="text-[16px] font-bold text-text">Nebula</span>
           </div>
           <button
             type="button"

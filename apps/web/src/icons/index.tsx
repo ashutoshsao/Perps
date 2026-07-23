@@ -192,18 +192,38 @@ export function SlidersIcon({ size = 15, ...p }: IconProps) {
   );
 }
 
-export function BackpackLogo({ size = 22, ...p }: IconProps) {
+export function NebulaLogo({ size = 22, ...p }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...p}>
-      <rect x="2" y="2" width="20" height="20" rx="6" fill="#ef2136" />
-      <path
-        d="M9 8.5a3 3 0 0 1 6 0v1H9v-1Z"
-        stroke="#fff"
+      <defs>
+        <linearGradient id="nebula-bg" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#1e1b4b" />
+          <stop offset="100%" stopColor="#4c1d95" />
+        </linearGradient>
+        <linearGradient id="nebula-ring" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#f0abfc" />
+          <stop offset="100%" stopColor="#818cf8" />
+        </linearGradient>
+        <radialGradient id="nebula-core" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#fff" />
+          <stop offset="100%" stopColor="#f0abfc" />
+        </radialGradient>
+      </defs>
+      <rect x="2" y="2" width="20" height="20" rx="6" fill="url(#nebula-bg)" />
+      <ellipse
+        cx="12"
+        cy="12"
+        rx="7.5"
+        ry="3.4"
+        transform="rotate(-32 12 12)"
+        stroke="url(#nebula-ring)"
         strokeWidth="1.4"
-        strokeLinejoin="round"
+        strokeLinecap="round"
+        strokeDasharray="20 3.5"
       />
-      <rect x="6.5" y="9" width="11" height="9.5" rx="2.2" stroke="#fff" strokeWidth="1.4" />
-      <path d="M9.5 12.5h5" stroke="#fff" strokeWidth="1.4" strokeLinecap="round" />
+      <circle cx="12" cy="12" r="2.4" fill="url(#nebula-core)" />
+      <circle cx="17.5" cy="6.5" r="0.9" fill="#fff" />
+      <circle cx="6" cy="17" r="0.6" fill="#fff" fillOpacity="0.7" />
     </svg>
   );
 }

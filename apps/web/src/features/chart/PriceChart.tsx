@@ -9,8 +9,10 @@ import {
   type IChartApi,
   type ISeriesApi,
   type UTCTimestamp,
+  type WhitespaceData,
 } from "lightweight-charts";
 import type { Candle } from "../../api/types";
+import { usd } from "../../lib/format";
 
 const GREEN = "#00c896";
 const RED = "#f6465d";
@@ -24,10 +26,10 @@ function toTime(bucket: string): UTCTimestamp {
 function toCandlestickData(candles: Candle[]): CandlestickData[] {
   return candles.map((c) => ({
     time: toTime(c.bucket),
-    open: Number(c.open),
-    high: Number(c.high),
-    low: Number(c.low),
-    close: Number(c.close),
+    open: usd(c.open),
+    high: usd(c.high),
+    low: usd(c.low),
+    close: usd(c.close),
   }));
 }
 
@@ -37,6 +39,44 @@ function toVolumeData(candles: Candle[]): HistogramData[] {
     value: Number(c.volume),
     color: Number(c.close) >= Number(c.open) ? "rgba(0, 200, 150, 0.5)" : "rgba(246, 70, 93, 0.5)",
   }));
+}
+
+const INTERVAL_SECONDS: Record<string, number> = {
+  "1m": 60,
+  "5m": 300,
+  "15m": 900,
+  "1h": 3600,
+  "4h": 14400,
+  "1d": 86400,
+};
+
+// Sparse markets can have a handful of candles (or just one), which leaves the
+// time scale with almost no ticks. Pad the series with whitespace buckets so the
+// axis always spans a real time window and gaps between candles stay linear.
+const MIN_VISIBLE_BARS = 60;
+
+function padWithWhitespace(
+  data: CandlestickData[],
+  intervalSeconds: number,
+): (CandlestickData | WhitespaceData)[] {
+  if (data.length === 0) return data;
+
+  const byTime = new Map<number, CandlestickData>(data.map((d) => [d.time as number, d]));
+  const last = data[data.length - 1]!.time as number;
+  const first = data[0]!.time as number;
+  const start = Math.min(first, last - (MIN_VISIBLE_BARS - 1) * intervalSeconds);
+
+  const out: (CandlestickData | WhitespaceData)[] = [];
+  for (let t = start; t <= last; t += intervalSeconds) {
+    out.push(byTime.get(t) ?? { time: t as UTCTimestamp });
+  }
+  // Keep any real candles that fall off the aligned grid.
+  for (const d of data) {
+    if ((((d.time as number) - start) % intervalSeconds) !== 0 || (d.time as number) < start) {
+      out.push(d);
+    }
+  }
+  return out.sort((a, b) => (a.time as number) - (b.time as number));
 }
 
 const RANGE_SECONDS: Record<string, number | null> = {
@@ -53,10 +93,12 @@ export function PriceChart({
   candles,
   showVolume,
   range,
+  interval,
 }: {
   candles: Candle[];
   showVolume: boolean;
   range: string;
+  interval: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -79,7 +121,7 @@ export function PriceChart({
         horzLines: { color: GRID },
       },
       rightPriceScale: { borderColor: GRID },
-      timeScale: { borderColor: GRID, timeVisible: true, secondsVisible: false },
+      timeScale: { borderColor: GRID, timeVisible: true, secondsVisible: false, rightOffset: 5 },
       crosshair: { mode: 0 },
       autoSize: true,
     });
@@ -112,7 +154,8 @@ export function PriceChart({
   }, []);
 
   useEffect(() => {
-    candleSeriesRef.current?.setData(toCandlestickData(candles));
+    const intervalSeconds = INTERVAL_SECONDS[interval] ?? 60;
+    candleSeriesRef.current?.setData(padWithWhitespace(toCandlestickData(candles), intervalSeconds));
     volumeSeriesRef.current?.setData(showVolume ? toVolumeData(candles) : []);
 
     const chart = chartRef.current;
@@ -125,7 +168,7 @@ export function PriceChart({
       const lastTime = toTime(candles[candles.length - 1]!.bucket);
       chart.timeScale().setVisibleRange({ from: (lastTime - seconds) as UTCTimestamp, to: lastTime });
     }
-  }, [candles, showVolume, range]);
+  }, [candles, showVolume, range, interval]);
 
   return <div ref={containerRef} className="absolute inset-0" />;
 }

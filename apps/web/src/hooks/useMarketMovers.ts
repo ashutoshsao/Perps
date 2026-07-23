@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import type { Market } from "../api/types";
+import { usd } from "../lib/format";
 
 export type Mover = {
   symbol: string;
@@ -34,7 +35,7 @@ export function useMarketMovers(markets: Market[]) {
         if (!Number.isFinite(changePct)) return;
         next.push({
           symbol: symbols[i]!,
-          price: `$${Number(ticker.close).toLocaleString()}`,
+          price: `$${usd(ticker.close).toLocaleString()}`,
           pct: `${changePct >= 0 ? "+" : ""}${changePct.toFixed(2)}%`,
           positive: changePct >= 0,
           changePct,

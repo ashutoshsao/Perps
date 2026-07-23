@@ -11,8 +11,11 @@ import {
   formatNumber,
   formatOrderError,
   formatPercent,
+  formatUsd,
   parsePositiveInt,
+  parseUsdToCents,
   percentToBps,
+  usd,
 } from "../../lib/format";
 import { getReferencePrice } from "../../lib/markets";
 import { slippagePresetPercents } from "../../lib/constants";
@@ -111,7 +114,11 @@ export function OrderTicketPanel() {
   }, [market?.symbol]);
 
   if (!market) {
-    return <div className="flex w-[336px] shrink-0 items-center justify-center p-4 text-[13px] text-text-dim">Loading markets...</div>;
+    return (
+      <div className="flex w-[336px] shrink-0 items-center justify-center border-l border-border-soft bg-panel p-4 text-[13px] text-text-dim">
+        Loading markets...
+      </div>
+    );
   }
   const activeMarket = market;
 
@@ -119,14 +126,14 @@ export function OrderTicketPanel() {
   const parsedLimitPrice = Number(price);
   const pricePlaceholderValue = getReferencePrice(markPrice, ticker);
   const pricePlaceholder = pricePlaceholderValue ? formatNumber(pricePlaceholderValue) : "Price";
-  const lastPrice = Number(ticker?.close);
-  const markPriceValue = typeof markPrice === "number" ? markPrice / 1_000_000 : null;
+  const lastPrice = ticker ? usd(ticker.close) : NaN;
+  const markPriceValue = typeof markPrice === "number" ? usd(markPrice) : null;
   const referencePrice = orderType === "Limit" && Number.isFinite(parsedLimitPrice) && parsedLimitPrice > 0
     ? parsedLimitPrice
     : pricePlaceholderValue;
   const estimatedNotional = Number.isFinite(parsedQty) && parsedQty > 0 && referencePrice ? parsedQty * referencePrice : null;
   const estimatedMargin = estimatedNotional ? estimatedNotional / leverage : null;
-  const hasEnoughBalance = estimatedMargin === null || !balance || balance.available >= estimatedMargin;
+  const hasEnoughBalance = estimatedMargin === null || !balance || usd(balance.available) >= estimatedMargin;
   const baseSymbol = market.symbol.split("-")[0] ?? market.symbol;
   const badge = baseSymbol.slice(0, 1);
 
@@ -140,7 +147,7 @@ export function OrderTicketPanel() {
     }
 
     const parsedQtyInt = parsePositiveInt(qty);
-    const parsedPriceInt = parsePositiveInt(price);
+    const parsedPriceCents = parseUsdToCents(price);
     const parsedSlippage = percentToBps(slippagePercent);
 
     if (!parsedQtyInt || parsedQtyInt < activeMarket.minQty) {
@@ -151,7 +158,7 @@ export function OrderTicketPanel() {
       setError(`Leverage must be between 1 and ${activeMarket.maxLeverage}.`);
       return;
     }
-    if (orderType === "Limit" && !parsedPriceInt) {
+    if (orderType === "Limit" && !parsedPriceCents) {
       setError("Limit orders need a positive price.");
       return;
     }
@@ -164,7 +171,7 @@ export function OrderTicketPanel() {
       setIsSubmitting(true);
       const response = await placeOrder(
         orderType === "Limit"
-          ? { orderType: "limit", side, symbol: activeMarket.symbol, price: parsedPriceInt!, qty: parsedQtyInt, leverage }
+          ? { orderType: "limit", side, symbol: activeMarket.symbol, price: parsedPriceCents!, qty: parsedQtyInt, leverage }
           : { orderType: "market", side, symbol: activeMarket.symbol, qty: parsedQtyInt, leverage, slippageBps: parsedSlippage! },
       );
       setSuccess(`Order ${response.order.status.replace("_", " ")}.`);
@@ -180,7 +187,7 @@ export function OrderTicketPanel() {
   }
 
   return (
-    <div className="flex w-[336px] shrink-0 flex-col gap-4 overflow-y-auto p-4">
+    <div className="flex w-[336px] shrink-0 flex-col gap-4 overflow-y-auto border-l border-border-soft bg-panel p-4">
       <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
@@ -217,7 +224,7 @@ export function OrderTicketPanel() {
 
       <div className="flex items-center justify-between text-[12px]">
         <span className="text-text-muted">Available Equity</span>
-        <span className="text-text">{balance ? `$${formatNumber(balance.available)}` : token ? "..." : "$0.00"}</span>
+        <span className="text-text">{balance ? `$${formatUsd(balance.available)}` : token ? "..." : "$0.00"}</span>
       </div>
 
       {orderType === "Limit" ? (
@@ -230,16 +237,16 @@ export function OrderTicketPanel() {
           badgeBg="#00c896"
           extra={
             <div className="flex items-center gap-2 text-[12px] font-medium">
-              <button type="button" onClick={() => bestBid && setPrice(String(Math.round(bestBid)))} disabled={!bestBid} className="text-blue hover:opacity-80 disabled:opacity-40">
+              <button type="button" onClick={() => bestBid && setPrice(String(usd(bestBid)))} disabled={!bestBid} className="text-blue hover:opacity-80 disabled:opacity-40">
                 Bid
               </button>
-              <button type="button" onClick={() => bestAsk && setPrice(String(Math.round(bestAsk)))} disabled={!bestAsk} className="text-blue hover:opacity-80 disabled:opacity-40">
+              <button type="button" onClick={() => bestAsk && setPrice(String(usd(bestAsk)))} disabled={!bestAsk} className="text-blue hover:opacity-80 disabled:opacity-40">
                 Ask
               </button>
-              <button type="button" onClick={() => Number.isFinite(lastPrice) && setPrice(String(Math.round(lastPrice)))} className="text-blue hover:opacity-80">
+              <button type="button" onClick={() => Number.isFinite(lastPrice) && setPrice(String(lastPrice))} className="text-blue hover:opacity-80">
                 Last
               </button>
-              <button type="button" onClick={() => markPriceValue && setPrice(String(Math.round(markPriceValue)))} disabled={!markPriceValue} className="text-blue hover:opacity-80 disabled:opacity-40">
+              <button type="button" onClick={() => markPriceValue && setPrice(String(markPriceValue))} disabled={!markPriceValue} className="text-blue hover:opacity-80 disabled:opacity-40">
                 Mark
               </button>
             </div>

@@ -5,8 +5,6 @@ export const market = {
   indexPrice: "64,441.9",
   change24hAbs: "+2,218.4",
   change24hPct: "+3.57%",
-  fundingRate: "0.0013%",
-  fundingCountdown: "00:41:01",
   high24h: "64,932.7",
   low24h: "61,786.3",
   volume24h: "89,428,579.77",

@@ -8,6 +8,7 @@ import { ChartPanel } from "./features/chart/ChartPanel";
 import { OrderBookPanel } from "./features/orderbook/OrderBookPanel";
 import { OrderTicketPanel } from "./features/ticket/OrderTicketPanel";
 import { AuthModal } from "./components/auth/AuthModal";
+import { NotificationListener } from "./components/notifications/NotificationListener";
 import { ToastProvider } from "./context/ToastContext";
 import { AuthProvider } from "./context/AuthContext";
 import { MarketProvider } from "./context/MarketContext";
@@ -25,10 +26,10 @@ export function App() {
               <TicketProvider>
                 <div className="flex h-screen min-w-[1200px] flex-col bg-bg text-text">
                   <TopNav />
-                  <MarketStrip />
 
                   <div className="flex min-h-0 flex-1">
                     <div className="flex min-h-0 flex-1 flex-col">
+                      <MarketStrip />
                       <div className="flex min-h-0 flex-1">
                         <ChartPanel />
                         <OrderBookPanel />
@@ -41,6 +42,7 @@ export function App() {
                   <FooterTicker />
                 </div>
                 <AuthModal />
+                <NotificationListener />
               </TicketProvider>
             </OrdersProvider>
           </TradingProvider>

@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react";
-import type { MarkPrice } from "../api/types";
+import type { IndexPrice } from "../api/types";
 import { subscribeChannel } from "../ws/client";
 
-type MarkPriceState = {
-  data: MarkPrice | null;
+type IndexPriceState = {
+  data: IndexPrice | null;
   error: string | null;
   isLive: boolean;
 };
 
-export function useMarkPrice(symbol: string | null): MarkPriceState {
-  const [state, setState] = useState<MarkPriceState>({ data: null, error: null, isLive: false });
+export function useIndexPrice(symbol: string | null): IndexPriceState {
+  const [state, setState] = useState<IndexPriceState>({ data: null, error: null, isLive: false });
 
   useEffect(() => {
     if (!symbol) {
@@ -17,7 +17,7 @@ export function useMarkPrice(symbol: string | null): MarkPriceState {
       return;
     }
 
-    const subscription = subscribeChannel<MarkPrice>(`market:${symbol}:markPrice`, (data) => {
+    const subscription = subscribeChannel<IndexPrice>(`market:${symbol}:index`, (data) => {
       if (data.symbol !== symbol) return;
       setState({ data, error: null, isLive: true });
     }, {

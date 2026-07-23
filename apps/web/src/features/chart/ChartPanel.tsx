@@ -6,7 +6,7 @@ import { chartTabs } from "../../data/mockMarket";
 import { useMarket } from "../../context/MarketContext";
 import { useTrading } from "../../context/TradingContext";
 import { useToast } from "../../context/ToastContext";
-import { formatNumber } from "../../lib/format";
+import { formatUsd } from "../../lib/format";
 
 const ranges = ["All", "1y", "6m", "3m", "1m", "5d", "1d"];
 const scaleToggles = ["%", "log", "auto"];
@@ -44,10 +44,10 @@ export function ChartPanel() {
   const latest = candles[candles.length - 1];
   const ohlc = latest
     ? {
-        open: formatNumber(latest.open),
-        high: formatNumber(latest.high),
-        low: formatNumber(latest.low),
-        close: formatNumber(latest.close),
+        open: formatUsd(latest.open),
+        high: formatUsd(latest.high),
+        low: formatUsd(latest.low),
+        close: formatUsd(latest.close),
       }
     : null;
 
@@ -69,7 +69,7 @@ export function ChartPanel() {
 
       <div className="relative min-h-0 flex-1 overflow-hidden px-1 pt-2">
         <div className="pointer-events-none absolute left-3 top-2 z-10 flex items-center gap-1.5 text-[12px] text-text-muted">
-          <span className="font-medium text-text">{market?.symbol ?? "Loading markets"} · {chartInterval} · Backpack</span>
+          <span className="font-medium text-text">{market?.symbol ?? "Loading markets"} · {chartInterval} · Nebula</span>
           <span className={`h-1.5 w-1.5 rounded-full ${tradesLive ? "bg-green" : "bg-text-dim"}`} />
           {ohlc && (
             <span>
@@ -84,7 +84,7 @@ export function ChartPanel() {
         ) : candlesLoading && candles.length === 0 ? (
           <div className="flex h-full items-center justify-center text-[13px] text-text-dim">Loading chart...</div>
         ) : (
-          <PriceChart candles={candles} showVolume={showVolume} range={range} />
+          <PriceChart candles={candles} showVolume={showVolume} range={range} interval={chartInterval} />
         )}
         {tradesError && (
           <div className="pointer-events-none absolute bottom-2 left-3 z-10 text-[11px] text-red">Live trades unavailable: {tradesError}</div>

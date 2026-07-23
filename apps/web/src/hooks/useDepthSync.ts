@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
-import { normalizeMarketSymbol } from "../api/symbols";
 import type { Depth, DepthDiff } from "../api/types";
 import { subscribeChannel } from "../ws/client";
 
@@ -62,7 +61,7 @@ export function useDepthSync(symbol: string | null): DepthSyncState {
     }
 
     let cancelled = false;
-    const activeSymbol = normalizeMarketSymbol(symbol);
+    const activeSymbol = symbol;
     const channel = `market:${activeSymbol}:depth`;
     bufferRef.current = [];
     snapshotReadyRef.current = false;
@@ -70,7 +69,7 @@ export function useDepthSync(symbol: string | null): DepthSyncState {
     setState({ depth: null, status: "connecting", error: null });
 
     const subscription = subscribeChannel<DepthDiff>(channel, (diff) => {
-      if (normalizeMarketSymbol(diff.symbol) !== activeSymbol) return;
+      if (diff.symbol !== activeSymbol) return;
       if (!snapshotReadyRef.current) {
         bufferRef.current.push(diff);
         return;

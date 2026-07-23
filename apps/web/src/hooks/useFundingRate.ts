@@ -1,23 +1,23 @@
 import { useEffect, useState } from "react";
-import type { MarkPrice } from "../api/types";
+import type { FundingUpdate } from "../api/types";
 import { subscribeChannel } from "../ws/client";
 
-type MarkPriceState = {
-  data: MarkPrice | null;
+type FundingRateState = {
+  data: FundingUpdate | null;
   error: string | null;
   isLive: boolean;
 };
 
-export function useMarkPrice(symbol: string | null): MarkPriceState {
-  const [state, setState] = useState<MarkPriceState>({ data: null, error: null, isLive: false });
+export function useFundingRate(symbol: string | null): FundingRateState {
+  const [state, setState] = useState<FundingRateState>({ data: null, error: null, isLive: false });
 
   useEffect(() => {
-    if (!symbol) {
-      setState({ data: null, error: null, isLive: false });
-      return;
-    }
+    // funding settles infrequently — always reset so a stale rate from the
+    // previous market never shows against the newly selected one
+    setState({ data: null, error: null, isLive: false });
+    if (!symbol) return;
 
-    const subscription = subscribeChannel<MarkPrice>(`market:${symbol}:markPrice`, (data) => {
+    const subscription = subscribeChannel<FundingUpdate>(`market:${symbol}:funding`, (data) => {
       if (data.symbol !== symbol) return;
       setState({ data, error: null, isLive: true });
     }, {

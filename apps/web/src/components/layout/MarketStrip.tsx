@@ -3,13 +3,15 @@ import { BitcoinGlyph, ChevronDownIcon } from "../../icons";
 import { Pill } from "../ui/Pill";
 import { useMarket } from "../../context/MarketContext";
 import {
+  formatFundingRate,
   formatLastPrice,
   formatMarkPrice,
   formatTickerChange,
   formatTickerVolume,
+  getFundingTone,
   getTickerTone,
 } from "../../lib/markets";
-import { formatNumber } from "../../lib/format";
+import { formatUsd } from "../../lib/format";
 
 function Stat({
   label,
@@ -29,7 +31,7 @@ function Stat({
 }
 
 export function MarketStrip() {
-  const { market, markets, symbol, setSymbol, ticker, markPrice, marketsError } = useMarket();
+  const { market, markets, symbol, setSymbol, ticker, markPrice, indexPrice, fundingRate, marketsError } = useMarket();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -43,6 +45,8 @@ export function MarketStrip() {
 
   const tone = getTickerTone(ticker);
   const toneClass = tone === "negative" ? "text-red" : tone === "positive" ? "text-green" : "text-text";
+  const fundingTone = getFundingTone(fundingRate);
+  const fundingClass = fundingTone === "negative" ? "text-red" : fundingTone === "positive" ? "text-green" : "text-text";
 
   return (
     <div className="flex h-[72px] shrink-0 items-center gap-8 border-b border-border-soft bg-panel px-6">
@@ -84,11 +88,12 @@ export function MarketStrip() {
         <span className="text-[12px] text-text-dim">{formatMarkPrice(markPrice)}</span>
       </div>
 
-      <Stat label="Index Price" value={formatMarkPrice(markPrice)} />
+      <Stat label="Index Price" value={formatMarkPrice(indexPrice)} />
+      <Stat label="Funding Rate" value={formatFundingRate(fundingRate)} valueClass={fundingClass} />
       <Stat label="24H Change" value={formatTickerChange(ticker)} valueClass={toneClass} />
-      <Stat label="24H High" value={ticker ? formatNumber(ticker.high) : "-"} />
-      <Stat label="24H Low" value={ticker ? formatNumber(ticker.low) : "-"} />
-      <Stat label="24H Volume (USD)" value={formatTickerVolume(ticker)} />
+      <Stat label="24H High" value={ticker ? formatUsd(ticker.high) : "-"} />
+      <Stat label="24H Low" value={ticker ? formatUsd(ticker.low) : "-"} />
+      <Stat label="24H Volume" value={formatTickerVolume(ticker)} />
     </div>
   );
 }

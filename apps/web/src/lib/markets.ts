@@ -1,6 +1,6 @@
 import type { Market, Ticker } from "../api/types";
 import { primaryMarketOrder } from "./constants";
-import { formatNumber } from "./format";
+import { formatNumber, formatUsd, usd } from "./format";
 
 export function sortMarkets(markets: Market[]) {
   return [...markets].sort((a, b) => {
@@ -31,19 +31,30 @@ export function formatPerpSymbol(symbol: string) {
 }
 
 export function formatMarkPrice(markPrice: number | undefined) {
-  if (typeof markPrice === "number") return formatNumber(markPrice / 1_000_000);
+  if (typeof markPrice === "number") return formatUsd(markPrice);
   return "-";
+}
+
+export function formatFundingRate(rate: number | null) {
+  if (rate == null) return "-";
+  return `${(rate * 100).toFixed(4)}%`;
+}
+
+export function getFundingTone(rate: number | null): "positive" | "negative" | "neutral" {
+  if (rate == null || rate === 0) return "neutral";
+  return rate > 0 ? "positive" : "negative";
 }
 
 export function formatLastPrice(ticker: Ticker | null) {
   if (!ticker) return "-";
-  return formatNumber(ticker.close);
+  return formatUsd(ticker.close);
 }
 
+// returns display dollars — only ever feed this to the UI, never back to the API
 export function getReferencePrice(markPrice: number | undefined, ticker: Ticker | null) {
-  if (typeof markPrice === "number" && Number.isFinite(markPrice)) return markPrice / 1_000_000;
+  if (typeof markPrice === "number" && Number.isFinite(markPrice)) return usd(markPrice);
   const close = Number(ticker?.close);
-  return Number.isFinite(close) && close > 0 ? close : null;
+  return Number.isFinite(close) && close > 0 ? usd(close) : null;
 }
 
 export function formatTickerChange(ticker: Ticker | null) {

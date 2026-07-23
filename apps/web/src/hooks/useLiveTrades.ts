@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { normalizeMarketSymbol } from "../api/symbols";
 import type { Trade, TradeUpdate } from "../api/types";
 import { subscribeChannel } from "../ws/client";
 
@@ -46,10 +45,8 @@ export function useLiveTrades(symbol: string | null, snapshotTrades: Trade[]) {
 
     if (!symbol) return;
 
-    const activeSymbol = normalizeMarketSymbol(symbol);
-
-    const subscription = subscribeChannel<TradeUpdate>(`market:${activeSymbol}:trade`, (update) => {
-      if (normalizeMarketSymbol(update.symbol) !== activeSymbol) return;
+    const subscription = subscribeChannel<TradeUpdate>(`market:${symbol}:trade`, (update) => {
+      if (update.symbol !== symbol) return;
       const trade = toTrade(update);
       setLiveTrades((current) => mergeTrades([trade, ...current], []));
     }, {

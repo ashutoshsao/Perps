@@ -3,10 +3,13 @@ import { TextTabs } from "../../components/ui/Tabs";
 import { DepthBuyIcon, DepthFullIcon, DepthSplitIcon, LockIcon, MinusIcon, PlusIcon } from "../../icons";
 import { useTrading } from "../../context/TradingContext";
 import { useTicket } from "../../context/TicketContext";
-import { formatNumber, formatTime } from "../../lib/format";
+import { useMarket } from "../../context/MarketContext";
+import { formatNumber, formatTime, formatUsd, usd } from "../../lib/format";
 
-const GROUPINGS = [1, 10, 100, 1000];
-const ROWS = 8;
+// aggregation steps in cents: $0.01, $0.10, $1, $10, $100
+const GROUPINGS = [1, 10, 100, 1000, 10000];
+// cap per side — generous enough that both sides scroll independently instead of clipping
+const ROWS = 40;
 type ViewMode = "full" | "split" | "buy";
 
 function aggregate(levels: [number, number][], step: number, direction: "up" | "down") {
@@ -54,7 +57,7 @@ function Row({
       className="relative grid w-full grid-cols-3 px-3 py-[3px] text-left text-[12px] hover:bg-surface"
     >
       <div className={`absolute inset-y-0 right-0 ${barColor}`} style={{ width: `${depth}%` }} />
-      <span className={`relative z-10 ${color}`}>{formatNumber(price)}</span>
+      <span className={`relative z-10 ${color}`}>{formatUsd(price)}</span>
       <span className="relative z-10 text-right text-text">{formatNumber(qty)}</span>
       <span className="relative z-10 text-right text-text-muted">{formatNumber(total)}</span>
     </button>
@@ -68,6 +71,7 @@ export function OrderBookPanel() {
   const [locked, setLocked] = useState(false);
   const { setPrice } = useTicket();
   const { depth, depthStatus, depthError, trades, tradesLoading, tradesError } = useTrading();
+  const { markPrice } = useMarket();
 
   const step = GROUPINGS[groupIdx]!;
 
@@ -93,39 +97,42 @@ export function OrderBookPanel() {
 
   const isLoading = depthStatus === "idle" || depthStatus === "connecting" || depthStatus === "snapshot";
   const visibleAsks = viewMode === "buy" ? [] : asks;
+  const lastTrade = trades[0];
 
   return (
-    <div className="flex w-[300px] shrink-0 flex-col border-r border-border-soft">
+    <div className="flex w-[300px] shrink-0 flex-col border-r border-border-soft bg-panel">
       <div className="flex h-11 shrink-0 items-center justify-between border-b border-border-soft px-4">
         <TextTabs items={["Book", "Trades"]} active={tab} onChange={setTab} />
       </div>
 
       <div className="flex h-9 shrink-0 items-center justify-between border-b border-border-soft px-3">
         <div className="flex items-center gap-3 text-text-muted">
-          <button type="button" onClick={() => setViewMode("full")} className={viewMode === "full" ? "text-blue" : "hover:text-text"}>
+          <button type="button" title="Bids and asks" onClick={() => setViewMode("full")} className={viewMode === "full" ? "text-blue" : "hover:text-text"}>
             <DepthFullIcon />
           </button>
-          <button type="button" onClick={() => setViewMode("split")} className={viewMode === "split" ? "text-blue" : "hover:text-text"}>
+          <button type="button" title="Split view" onClick={() => setViewMode("split")} className={viewMode === "split" ? "text-blue" : "hover:text-text"}>
             <DepthSplitIcon />
           </button>
-          <button type="button" onClick={() => setViewMode("buy")} className={viewMode === "buy" ? "text-blue" : "hover:text-text"}>
+          <button type="button" title="Bids only" onClick={() => setViewMode("buy")} className={viewMode === "buy" ? "text-blue" : "hover:text-text"}>
             <DepthBuyIcon />
           </button>
-          <button type="button" onClick={() => setLocked((v) => !v)} className={locked ? "text-blue" : "hover:text-text"}>
+          <button type="button" title={locked ? "Unlock price scrolling" : "Lock price scrolling"} onClick={() => setLocked((v) => !v)} className={locked ? "text-blue" : "hover:text-text"}>
             <LockIcon />
           </button>
         </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
+            title="Widen price grouping"
             onClick={() => setGroupIdx((i) => (i - 1 + GROUPINGS.length) % GROUPINGS.length)}
             className="text-text-muted hover:text-text"
           >
             <MinusIcon />
           </button>
-          <span className="text-[12px] text-text">{step}</span>
+          <span title="Price grouping" className="cursor-default text-[12px] text-text">{formatNumber(step / 100)}</span>
           <button
             type="button"
+            title="Narrow price grouping"
             onClick={() => setGroupIdx((i) => (i + 1) % GROUPINGS.length)}
             className="text-text-muted hover:text-text"
           >
@@ -142,14 +149,14 @@ export function OrderBookPanel() {
             Depth unavailable: {depthError}
           </div>
         ) : (
-          <>
-            <div className="grid grid-cols-3 px-3 py-1.5 text-[11px] font-medium text-text-dim">
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="grid shrink-0 grid-cols-3 px-3 py-1.5 text-[11px] font-medium text-text-dim">
               <span>Price</span>
               <span className="text-right">Size</span>
               <span className="text-right">Total</span>
             </div>
 
-            <div className="flex flex-col">
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
               {visibleAsks.map((a) => (
                 <Row
                   key={a.price}
@@ -158,17 +165,22 @@ export function OrderBookPanel() {
                   qty={a.qty}
                   total={a.total}
                   depth={(a.total / maxTotal) * 100}
-                  onClick={() => setPrice(String(Math.round(a.price)))}
+                  onClick={() => setPrice(String(usd(a.price)))}
                 />
               ))}
-            </div>
 
-            <div className="flex items-baseline gap-2 px-3 py-1.5 text-[16px] font-bold">
-              <span className="text-green">{bids[0] ? formatNumber(bids[0].price) : "-"}</span>
-              <span className="text-red">{asks[asks.length - 1] ? formatNumber(asks[asks.length - 1]!.price) : "-"}</span>
-            </div>
+              <div className="flex shrink-0 items-baseline gap-2 px-3 py-1.5">
+                <span
+                  title="Last traded price"
+                  className={`cursor-default text-[16px] font-bold ${lastTrade ? (lastTrade.side === "buy" ? "text-green" : "text-red") : "text-text"}`}
+                >
+                  {lastTrade ? formatUsd(lastTrade.price) : "-"}
+                </span>
+                <span title="Mark price" className="cursor-default text-[13px] font-medium text-text-dim">
+                  {typeof markPrice === "number" ? formatUsd(markPrice) : "-"}
+                </span>
+              </div>
 
-            <div className="flex flex-col">
               {bids.map((b) => (
                 <Row
                   key={b.price}
@@ -177,18 +189,18 @@ export function OrderBookPanel() {
                   qty={b.qty}
                   total={b.total}
                   depth={(b.total / maxTotal) * 100}
-                  onClick={() => setPrice(String(Math.round(b.price)))}
+                  onClick={() => setPrice(String(usd(b.price)))}
                 />
               ))}
             </div>
 
-            <div className="mt-auto flex h-6 shrink-0 text-[11px] font-semibold">
+            <div className="flex h-6 shrink-0 text-[11px] font-semibold">
               <div className="flex items-center bg-green pl-2 text-black/80" style={{ width: `${buyRatio}%` }}>
                 {buyRatio}%
               </div>
               <div className="flex flex-1 items-center justify-end bg-red pr-2 text-white">{sellRatio}%</div>
             </div>
-          </>
+          </div>
         )
       ) : (
         <>
@@ -209,10 +221,10 @@ export function OrderBookPanel() {
                 <button
                   key={i}
                   type="button"
-                  onClick={() => setPrice(String(Math.round(Number(t.price))))}
+                  onClick={() => setPrice(String(usd(t.price)))}
                   className="grid grid-cols-3 px-3 py-[3px] text-left text-[12px] hover:bg-surface"
                 >
-                  <span className={t.side === "buy" ? "text-green" : "text-red"}>{formatNumber(t.price)}</span>
+                  <span className={t.side === "buy" ? "text-green" : "text-red"}>{formatUsd(t.price)}</span>
                   <span className="text-right text-text">{formatNumber(t.qty)}</span>
                   <span className="text-right text-text-muted">{formatTime(t.time)}</span>
                 </button>

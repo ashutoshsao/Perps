@@ -1,5 +1,23 @@
 import type { UserOrder } from "../api/types";
 
+// Backend money values (prices, balances, margins) are integer cents.
+// Convert only at the display/input boundary — never store dollars in state.
+export const CENTS_PER_USD = 100;
+
+export function usd(cents: number | string) {
+  return Number(cents) / CENTS_PER_USD;
+}
+
+export function formatUsd(cents: number | string) {
+  return formatNumber(usd(cents));
+}
+
+export function parseUsdToCents(value: string) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.round(parsed * CENTS_PER_USD);
+}
+
 export function formatNumber(value: number | string) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return String(value);

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { BackpackLogo, ChevronDownIcon, MoonIcon, SearchIcon, SunIcon } from "../../icons";
+import { NebulaLogo, ChevronDownIcon, MoonIcon, SearchIcon, SunIcon } from "../../icons";
 import { navLinks } from "../../data/mockMarket";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import { DepositModal } from "../account/DepositModal";
+import { CreateMarketModal } from "../admin/CreateMarketModal";
 
 const ACTIVE_NAV_LINK = "Futures";
 
@@ -25,6 +26,7 @@ export function TopNav() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
+  const [createMarketOpen, setCreateMarketOpen] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">(() =>
     (localStorage.getItem("bp_theme") as "dark" | "light") ?? "dark",
   );
@@ -44,8 +46,8 @@ export function TopNav() {
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-border-soft bg-panel px-6">
       <div className="flex items-center gap-8">
         <div className="flex items-center gap-2">
-          <BackpackLogo size={26} />
-          <span className="text-[17px] font-bold text-text">Backpack</span>
+          <NebulaLogo size={26} />
+          <span className="text-[17px] font-bold text-text">Nebula</span>
         </div>
 
         <nav className="flex items-center gap-7">
@@ -136,6 +138,16 @@ export function TopNav() {
                 <button
                   type="button"
                   onClick={() => {
+                    setAccountOpen(false);
+                    setCreateMarketOpen(true);
+                  }}
+                  className="block w-full rounded-md px-3 py-2 text-left text-[13px] text-text hover:bg-surface"
+                >
+                  Create Market
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
                     logout();
                     setAccountOpen(false);
                     push("Logged out");
@@ -168,6 +180,7 @@ export function TopNav() {
       </div>
 
       {depositOpen && <DepositModal onClose={() => setDepositOpen(false)} />}
+      {createMarketOpen && <CreateMarketModal onClose={() => setCreateMarketOpen(false)} />}
     </header>
   );
 }

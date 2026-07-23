@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useOrders } from "../../context/OrdersContext";
 import { useToast } from "../../context/ToastContext";
-import { BackpackLogo } from "../../icons";
+import { NebulaLogo } from "../../icons";
 
 function CloseIcon({ size = 16 }: { size?: number }) {
   return (
@@ -30,7 +30,8 @@ export function DepositModal({ onClose }: { onClose: () => void }) {
     setError(null);
     setIsSubmitting(true);
     try {
-      await deposit(value);
+      // input is dollars; the backend holds balances in integer cents
+      await deposit(Math.round(value * 100));
       push(`Deposited $${value.toLocaleString()}`, "success");
       onClose();
     } catch (err) {
@@ -45,7 +46,7 @@ export function DepositModal({ onClose }: { onClose: () => void }) {
       <div className="w-[380px] rounded-2xl border border-border bg-panel p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-5 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <BackpackLogo size={24} />
+            <NebulaLogo size={24} />
             <span className="text-[16px] font-bold text-text">Deposit</span>
           </div>
           <button

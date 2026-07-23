@@ -4,7 +4,7 @@ import { bottomTabs } from "../../data/mockMarket";
 import { useOrders } from "../../context/OrdersContext";
 import { useMarket } from "../../context/MarketContext";
 import { useAuth } from "../../context/AuthContext";
-import { formatNumber, formatTime } from "../../lib/format";
+import { formatNumber, formatTime, formatUsd, usd } from "../../lib/format";
 import { getMarketSymbol } from "../../lib/markets";
 
 const UNSUPPORTED_TABS = new Set(["Borrows", "TWAP", "Position His"]);
@@ -121,13 +121,13 @@ export function BottomPanel() {
               <div className="rounded-lg bg-surface p-3">
                 <p className="text-[11px] text-text-dim">Available</p>
                 <p className="mt-1 text-[16px] font-semibold text-text">
-                  {balanceLoading ? "..." : `$${formatNumber(balance?.available ?? 0)}`}
+                  {balanceLoading ? "..." : `$${formatUsd(balance?.available ?? 0)}`}
                 </p>
               </div>
               <div className="rounded-lg bg-surface p-3">
                 <p className="text-[11px] text-text-dim">Locked</p>
                 <p className="mt-1 text-[16px] font-semibold text-text">
-                  {balanceLoading ? "..." : `$${formatNumber(balance?.locked ?? 0)}`}
+                  {balanceLoading ? "..." : `$${formatUsd(balance?.locked ?? 0)}`}
                 </p>
               </div>
             </div>
@@ -145,14 +145,15 @@ export function BottomPanel() {
                   <span className="text-right">ROE</span>
                 </div>
                 {filteredPositions.map((position) => {
-                  const mark = position.symbol === symbol && typeof markPrice === "number" ? markPrice / 1_000_000 : null;
-                  const notional = position.averagePrice * position.qty;
+                  const mark = position.symbol === symbol && typeof markPrice === "number" ? usd(markPrice) : null;
+                  const entry = usd(position.averagePrice);
+                  const notional = entry * position.qty;
                   const pnl =
                     mark === null
                       ? null
                       : position.side === "long"
-                        ? (mark - position.averagePrice) * position.qty
-                        : (position.averagePrice - mark) * position.qty;
+                        ? (mark - entry) * position.qty
+                        : (entry - mark) * position.qty;
                   const roe = pnl === null || notional === 0 ? null : (pnl / notional) * 100;
 
                   return (
@@ -160,7 +161,7 @@ export function BottomPanel() {
                       <span className="text-text">{position.symbol}</span>
                       <span className={position.side === "long" ? "text-green" : "text-red"}>{position.side}</span>
                       <span className="text-right text-text">{formatNumber(position.qty)}</span>
-                      <span className="text-right text-text">{formatNumber(position.averagePrice)}</span>
+                      <span className="text-right text-text">{formatNumber(entry)}</span>
                       <span className={`text-right ${pnl === null ? "text-text-dim" : pnl >= 0 ? "text-green" : "text-red"}`}>
                         {pnl === null ? "-" : `${pnl >= 0 ? "+" : ""}$${formatNumber(pnl)}`}
                       </span>
@@ -189,7 +190,7 @@ export function BottomPanel() {
                   <div key={order.id} className="grid grid-cols-6 items-center gap-2 px-4 py-1.5 text-[12px]">
                     <span className="text-text">{getMarketSymbol(order.marketId, markets)}</span>
                     <span className={order.side === "buy" ? "text-green" : "text-red"}>{order.side === "buy" ? "Buy" : "Sell"}</span>
-                    <span className="text-right text-text">{formatNumber(order.price)}</span>
+                    <span className="text-right text-text">{formatUsd(order.price)}</span>
                     <span className="text-right text-text">{formatNumber(order.qty)}</span>
                     <span className="text-right text-text-muted">{formatNumber(order.filledQty)}</span>
                     <span className="text-right">
@@ -222,7 +223,7 @@ export function BottomPanel() {
                   <div key={order.id} className="grid grid-cols-5 gap-2 px-4 py-1.5 text-[12px]">
                     <span className="text-text">{getMarketSymbol(order.marketId, markets)}</span>
                     <span className={order.side === "buy" ? "text-green" : "text-red"}>{order.side === "buy" ? "Buy" : "Sell"}</span>
-                    <span className="text-right text-text">{formatNumber(order.price)}</span>
+                    <span className="text-right text-text">{formatUsd(order.price)}</span>
                     <span className="text-right text-text-muted">
                       {formatNumber(order.filledQty)}/{formatNumber(order.qty)}
                     </span>
@@ -247,7 +248,7 @@ export function BottomPanel() {
                   <div key={fill.id} className="grid grid-cols-5 gap-2 px-4 py-1.5 text-[12px]">
                     <span className="text-text">{fill.symbol}</span>
                     <span className={fill.side === "buy" ? "text-green" : "text-red"}>{fill.side === "buy" ? "Buy" : "Sell"}</span>
-                    <span className="text-right text-text">{formatNumber(fill.price)}</span>
+                    <span className="text-right text-text">{formatUsd(fill.price)}</span>
                     <span className="text-right text-text">{formatNumber(fill.qty)}</span>
                     <span className="text-right text-text-muted">{formatTime(fill.createdAt)}</span>
                   </div>

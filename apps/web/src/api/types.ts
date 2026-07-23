@@ -35,6 +35,24 @@ export type MarkPrice = {
   time: number;
 };
 
+export type IndexPrice = {
+  symbol: string;
+  price: number;
+  time: number;
+};
+
+export type FundingUpdate = {
+  symbol: string;
+  rate: number;
+  settledAt: number;
+};
+
+export type UserNotification = {
+  type: "liquidation" | "adl";
+  symbol: string;
+  qty: number;
+};
+
 export type OrderPayload =
   | {
       orderType: "limit";
