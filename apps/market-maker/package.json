@@ -1,0 +1,22 @@
+{
+  "name": "@repo/market-maker",
+  "version": "0.0.0",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "license": "MIT",
+  "scripts": {
+    "lint": "eslint \"**/*.ts\"",
+    "dev": "bun index.ts"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "*",
+    "@repo/typescript-config": "*",
+    "@types/bun": "latest",
+    "eslint": "^8.57.0",
+    "typescript": "5.5.4"
+  },
+  "module": "index.ts",
+  "type": "module",
+  "private": true
+}
