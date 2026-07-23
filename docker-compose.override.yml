@@ -7,7 +7,7 @@ services:
       - /app/node_modules
       - /app/apps/web/node_modules
       - /app/apps/api/node_modules
-      - /app/apps/db-puller/node_modules
+      - /app/apps/db-poller/node_modules
       - /app/apps/engine/node_modules
       - /app/apps/price-feeder/node_modules
       - /app/apps/tests/node_modules

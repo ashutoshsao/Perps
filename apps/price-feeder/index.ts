@@ -1,31 +1,47 @@
 import WebSocket from "ws"
 import { loopback } from "./src/loopBack";
-import { getFeedSymbolForMarketSymbol, getMarketSymbolForFeedSymbol, newMarket, subscribedMarkets } from "./src/helper/newMarket";
+import { getFeedSymbolForMarketSymbol, getMarketSymbolsForFeedSymbol, newMarket, subscribedMarkets } from "./src/helper/newMarket";
+import { parseMarkPriceFrame } from "./src/helper/parseMarkPriceFrame";
 import { getRedisClient } from "@repo/redis";
 import { REDIS_KEYS } from "@repo/types";
 
 const readRedis = getRedisClient();
 const writeRedis = getRedisClient();
-const ws = new WebSocket("wss://fstream.binance.com/market/ws");
+// markPrice is a "Market"-category stream under Binance's 2026-03 routed WS
+// architecture. The unrouted /stream endpoint still ACKs a SUBSCRIBE to it but
+// silently never pushes data (confirmed by hand against the live socket) — the
+// routed /market/stream endpoint is required to actually receive ticks.
+const ws = new WebSocket("wss://fstream.binance.com/market/stream");
 const enableRestFallback = process.env.PRICE_FEEDER_REST_FALLBACK === "true";
 let restPollStarted = false;
 
 ws.on("open", async () => {
+  console.log("price-feeder: connected to Binance")
   watchNewMarkets()  // start watching FIRST — don't miss any create_market events
   const markets = await loopback() as string[]  // then get existing markets
   for (const symbol of markets) newMarket(ws, symbol)  // subscribe to all
+  console.log(`price-feeder: subscribed to ${markets.length} market(s): ${markets.join(", ")}`)
   if (enableRestFallback) startPremiumIndexPoll()
 })
 
+ws.on("close", (code, reason) => {
+  console.error(`price-feeder: Binance socket closed (${code}) ${reason.toString()}`)
+})
+
+ws.on("error", (err) => {
+  console.error("price-feeder: Binance socket error", err)
+})
+
 ws.on("message", async (data) => {
-  const msg = JSON.parse(data.toString())
-  if (!msg.e) return
+  const tick = parseMarkPriceFrame(data.toString())
+  if (!tick) return
 
-  const symbol = getMarketSymbolForFeedSymbol(msg.s)
-  if (!symbol) return
+  const symbols = getMarketSymbolsForFeedSymbol(tick.feedSymbol)
+  if (symbols.size === 0) return
 
-  const price = Math.floor(parseFloat(msg.i) * 1_000_000)
-  await publishMarkPrice(symbol, price, msg.E)
+  for (const symbol of symbols) {
+    await publishIndexPrice(symbol, tick.price, tick.time)
+  }
 })
 
 ws.on("ping", (data) => ws.pong(data))
@@ -53,7 +69,7 @@ async function watchNewMarkets() {
   }
 }
 
-async function publishMarkPrice(symbol: string, price: number, time: number) {
+async function publishIndexPrice(symbol: string, price: number, time: number) {
   const client = await writeRedis;
   await client.xAdd(REDIS_KEYS.engineCommands, '*', {
     type: 'update_index_price',
@@ -62,7 +78,7 @@ async function publishMarkPrice(symbol: string, price: number, time: number) {
     payload: JSON.stringify({ symbol, price })
   })
 
-  await client.publish(`market:${symbol}:markPrice`, JSON.stringify({
+  await client.publish(`market:${symbol}:index`, JSON.stringify({
     symbol,
     price,
     time
@@ -87,7 +103,7 @@ async function pollPremiumIndex() {
       const data = await response.json() as { markPrice?: string; time?: number };
       const markPrice = Number(data.markPrice);
       if (!Number.isFinite(markPrice) || markPrice <= 0) continue;
-      await publishMarkPrice(symbol, Math.floor(markPrice * 1_000_000), data.time ?? Date.now());
+      await publishIndexPrice(symbol, Math.round(markPrice * 100), data.time ?? Date.now());
     } catch {
       // Keep the websocket feeder alive if the REST fallback misses a poll.
     }

@@ -14,7 +14,9 @@ wss.on("connection", (ws) => {
       if (message.type === "SUBSCRIBE") {
         //subscribe to channel
         if (message.channel.startsWith("user")) {
-          verifyUserChannel(message.channel, message.token);
+          if (!verifyUserChannel(message.channel, message.token)) {
+            throw new Error(`unauthorized channel: ${message.channel}`);
+          }
         }
         //auth done now same add ws socket to map for that channel
         if (!connectedSockets.has(message.channel)) {
@@ -38,7 +40,9 @@ wss.on("connection", (ws) => {
       else {
         //unsubscribe from channel
         if (message.channel.startsWith("user")) {
-          verifyUserChannel(message.channel, message.token);
+          if (!verifyUserChannel(message.channel, message.token)) {
+            throw new Error(`unauthorized channel: ${message.channel}`);
+          }
         }
         if (!connectedSockets.has(message.channel)) return;
         connectedSockets.get(message.channel)?.delete(ws)

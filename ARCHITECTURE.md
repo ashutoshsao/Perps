@@ -6,11 +6,16 @@ This repo implements a centralized perpetual futures exchange. The backend is co
 
 - `apps/engine`: Redis command consumer for markets, balances, matching, depth, positions, and funding triggers.
 - `apps/api`: Express REST API under `/api` for auth, trading commands, account reads, and market data.
-- `apps/db-puller`: consumes successful engine events and persists orders/fills to Postgres and raw fills to TimescaleDB.
+- `apps/db-poller`: consumes successful engine events and persists orders/fills to Postgres and raw fills to TimescaleDB.
 - `apps/wss`: WebSocket gateway for market and user realtime channels.
 - `apps/price-feeder`: subscribes to external mark-price feeds and forwards price updates.
+- `apps/market-maker`: simulated participants (quoter, taker, liquidation-prone degen) that trade exclusively through the public API/wss so demo markets stay live; also seeds the demo markets on boot.
 - `packages/db`: Prisma Postgres client plus Timescale helpers.
 - `packages/types`: shared API schemas, engine payloads, market data, and event types.
+
+## Units
+
+Money is integer cents everywhere outside the browser: order prices, index/mark prices, balances, margins, and funding payments. Quantities are integer base units of the asset. Floats never enter the engine or the wire — the web app converts cents to dollars only when rendering (`usd()` / `formatUsd()`) and dollars back to cents only when parsing user input (`parseUsdToCents()`).
 
 ## Frontend Stack
 

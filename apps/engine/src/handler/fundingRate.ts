@@ -1,9 +1,9 @@
-import { Settlements } from "@repo/types";
+import { Settlement } from "@repo/types";
 import { FUNDING_RATE_ACCOUMILATOR, INDEX_PRICES, LAST_FUNDING, ORDERBOOKS, POSITIONS } from "../engine-store";
 
 export function fundingRate(streamMsgId: string) {
 
-  let settlements: Settlements[] = [];
+  let settlements: Settlement[] = [];
 
   for (const [symbol, orderbook] of ORDERBOOKS) {
     const indexPrice = INDEX_PRICES.get(symbol);

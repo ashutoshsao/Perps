@@ -1,5 +1,5 @@
 {
-  "name": "@repo/db-puller",
+  "name": "@repo/db-poller",
   "version": "0.0.0",
   "exports": {
     ".": "./index.ts"

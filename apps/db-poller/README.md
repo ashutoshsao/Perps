@@ -1,4 +1,4 @@
-# @repo/db-puller
+# @repo/db-poller
 
 To install dependencies:
 

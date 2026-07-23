@@ -79,7 +79,7 @@ export type OrderRecord = {
   createdAt: number
 }
 
-export interface Settlements {
+export interface Settlement {
   userId: string,
   symbol: string,
   rate: number,
@@ -197,4 +197,12 @@ export type CreateOrderResponse = {
 export type CancelOrderResponse = {
   order: OrderRecord
   depthDiff: DepthDiff
+}
+
+export type LiquidationEvent = CreateOrderResponse & { reason?: "liquidation" | "adl" }
+
+export type UpdateIndexPriceResponse = {
+  symbol: string
+  markPrice: number
+  events: LiquidationEvent[]
 }

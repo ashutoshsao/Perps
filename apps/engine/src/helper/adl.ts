@@ -1,8 +1,10 @@
-import { Position } from "@repo/types";
+import { LiquidationEvent, Position } from "@repo/types";
 import { INDEX_PRICES, POSITIONS } from "../engine-store";
 import { createOrder } from "../handler/createOrder";
 
-export function adl(position: Position, streamMsgId: string) {
+export function adl(position: Position, streamMsgId: string): LiquidationEvent[] {
+
+  let adlOrders: LiquidationEvent[] = [];
   const oppositeSide = position.positionSide === "long" ? "short" : "long";
   const markPrice = INDEX_PRICES.get(position.symbol)!;
   const candidates: { userId: string, pos: Position, pnl: number }[] = []
@@ -30,7 +32,7 @@ export function adl(position: Position, streamMsgId: string) {
     if (remainingQty <= 0) break;
     const fillQty = Math.min(candidate.pos.qty, remainingQty);
     remainingQty -= fillQty;
-    createOrder({
+    const adlOrder = createOrder({
       userId: candidate.pos.userId,
       symbol: position.symbol,
       side: candidate.pos.positionSide === "long" ? "sell" : "buy",
@@ -39,10 +41,11 @@ export function adl(position: Position, streamMsgId: string) {
       leverage: Math.floor((candidate.pos.averagePrice * candidate.pos.qty) / candidate.pos.margin),
       slippageBps: 10000
     }, streamMsgId, `adl-${position.symbol}-${candidate.userId}`);
-
+    adlOrders.push({ ...adlOrder, reason: "adl" });
   }
   if (remainingQty > 0) {
     console.error(`ADL failed for ${position.symbol} — remaining qty: ${remainingQty}`)
     // V2: socialize loss across all positions
   }
+  return adlOrders;
 }

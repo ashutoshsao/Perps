@@ -1,8 +1,8 @@
-import { Position } from "@repo/types";
+import { LiquidationEvent, Position } from "@repo/types";
 import { createOrder } from "../handler/createOrder";
 import { adl } from "./adl";
 
-export function liquidatePosition(userId: string, position: Position, streamMsgId: string) {
+export function liquidatePosition(userId: string, position: Position, streamMsgId: string): LiquidationEvent[] {
   const order = createOrder({
     userId,
     symbol: position.symbol,
@@ -12,10 +12,10 @@ export function liquidatePosition(userId: string, position: Position, streamMsgI
     leverage: Math.floor((position.averagePrice * position.qty) / position.margin),
     slippageBps: 10000,
   }, streamMsgId, `liq-${position.symbol}-${userId}`)
-
-  if (order.fills.length === 0) {
+  if (order.fills.length > 0) {
+    return [{ ...order, reason: "liquidation" }];
+  } else {
     // no liquidity — ADL needed
-    adl(position, streamMsgId);
-    return
+    return adl(position, streamMsgId);
   }
 }

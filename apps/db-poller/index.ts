@@ -4,7 +4,7 @@ import type { RedisResponseType } from "@repo/types";
 import { updateDb } from "./src/updateDb";
 const readRedis = getRedisClient();
 
-const DB_EVENTS = new Set(["create_order", "cancel_order"]);
+const DB_EVENTS = new Set(["update_index_price", "funding_rate", "create_order", "cancel_order"]);
 const GROUP = "db-puller"
 const CONSUMER = "db-puller-1"
 

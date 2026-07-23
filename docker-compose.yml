@@ -78,10 +78,10 @@ services:
         condition: service_started
     restart: unless-stopped
 
-  db-puller:
+  db-poller:
     build:
       context: .
-      dockerfile: apps/db-puller/Dockerfile
+      dockerfile: apps/db-poller/Dockerfile
     env_file:
       - .env.docker
     depends_on:
@@ -89,6 +89,24 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    restart: unless-stopped
+
+  market-maker:
+    build:
+      context: .
+      dockerfile: apps/market-maker/Dockerfile
+    env_file:
+      - .env.docker
+    environment:
+      MM_API_URL: http://api:4000/api
+      MM_WS_URL: ws://wss:3030
+    depends_on:
+      api:
+        condition: service_started
+      wss:
+        condition: service_started
+      price-feeder:
+        condition: service_started
     restart: unless-stopped
 
   wss:

@@ -32,8 +32,8 @@
         "typescript": "5.5.4",
       },
     },
-    "apps/db-puller": {
-      "name": "@repo/db-puller",
+    "apps/db-poller": {
+      "name": "@repo/db-poller",
       "version": "0.0.0",
       "dependencies": {
         "@repo/db": "workspace:*",
@@ -69,6 +69,17 @@
         "@repo/typescript-config": "*",
         "@types/bun": "latest",
         "@types/express": "^5.0.6",
+        "eslint": "^8.57.0",
+        "typescript": "5.5.4",
+      },
+    },
+    "apps/market-maker": {
+      "name": "@repo/market-maker",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@repo/eslint-config": "*",
+        "@repo/typescript-config": "*",
+        "@types/bun": "latest",
         "eslint": "^8.57.0",
         "typescript": "5.5.4",
       },
@@ -423,11 +434,13 @@
 
     "@repo/db": ["@repo/db@workspace:packages/db"],
 
-    "@repo/db-puller": ["@repo/db-puller@workspace:apps/db-puller"],
+    "@repo/db-poller": ["@repo/db-poller@workspace:apps/db-poller"],
 
     "@repo/engine": ["@repo/engine@workspace:apps/engine"],
 
     "@repo/eslint-config": ["@repo/eslint-config@workspace:packages/eslint-config"],
+
+    "@repo/market-maker": ["@repo/market-maker@workspace:apps/market-maker"],
 
     "@repo/price-feeder": ["@repo/price-feeder@workspace:apps/price-feeder"],
 

@@ -36,7 +36,9 @@ export const CreateOrderApiSchema = z.discriminatedUnion("orderType", [
 export const CancelOrderApiSchema = z.string();
 
 export const CreateMarketApiSchema = z.object({
-  symbol: z.string().min(1),
+  // canonical form is decided here, once — everything downstream (Postgres, the
+  // engine's MARKETS/ORDERBOOKS keys, every market:{symbol}:* channel) uses it verbatim
+  symbol: z.string().trim().toUpperCase().regex(/^[A-Z0-9]+(-[A-Z0-9]+)*$/),
   imageUrl: z.string(),
   maxLeverage: int.min(1),
   minQty: int.min(1),

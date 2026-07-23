@@ -9,4 +9,4 @@ ENV DATABASE_URL=postgresql://perps:perps@localhost:5432/perps
 RUN bun install --frozen-lockfile
 RUN cd packages/db && bunx prisma generate
 
-CMD ["bun", "apps/db-puller/index.ts"]
+CMD ["bun", "apps/db-poller/index.ts"]

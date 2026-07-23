@@ -23,14 +23,15 @@ model User {
 }
 
 model Market {
-  id          String   @id @default(uuid())
-  symbol      String   @unique
-  imageUrl    String
-  maxLeverage Int
-  minQty      Int
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  orders      Order[]
+  id           String        @id @default(uuid())
+  symbol       String        @unique
+  imageUrl     String
+  maxLeverage  Int
+  minQty       Int
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  orders       Order[]
+  fundingRates FundingRate[]
 }
 
 model Order {
@@ -84,4 +85,15 @@ enum Side {
 enum OrderType {
   limit
   market
+}
+
+model FundingRate {
+  id        String   @id @default(uuid())
+  marketId  String
+  symbol    String
+  rate      Float
+  settledAt DateTime
+  market    Market   @relation(fields: [marketId], references: [id])
+
+  @@unique([symbol, settledAt])
 }

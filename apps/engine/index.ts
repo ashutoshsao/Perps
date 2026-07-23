@@ -1,5 +1,5 @@
 import { getRedisClient } from "@repo/redis";
-import { EngineRequest, REDIS_KEYS, RedisResponseType } from "@repo/types";
+import { EngineRequest, REDIS_KEYS, RedisResponseType, UpdateIndexPriceResponse } from "@repo/types";
 import { handleCommand } from "./src/controller/engine.controller";
 import { loadSnapshot, saveSnapshot } from "./src/helper/snapshot";
 const readClient = getRedisClient()
@@ -52,7 +52,31 @@ async function startUp() {
 
           const response = handleCommand(request);
 
-          if (!response) continue;// for update_index_price
+          if (!response) continue;
+
+          if (type === "update_index_price") {
+            const { symbol, markPrice, events } = response as UpdateIndexPriceResponse;
+
+            // mark price is ephemeral — fire-and-forget pub/sub, never the durable event log
+            const time = parseInt(`${msg.id.split("-")[0]}`);
+            await writeRedis.publish(`market:${symbol}:markPrice`, JSON.stringify({
+              symbol,
+              price: markPrice,
+              time
+            }))
+
+            // the durable stream only sees ticks that carry liquidation/ADL events
+            if (events.length > 0) {
+              await writeRedis.xAdd(REDIS_KEYS.engineEvents, '*', {
+                type,
+                correlationId,
+                ok: 'true',
+                error: '',
+                data: JSON.stringify(response),
+              })
+            }
+            continue;
+          }
 
           if (GLOBAL_EVENTS.has(type)) {
             // create_order, cancel_order, create_market,

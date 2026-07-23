@@ -132,7 +132,7 @@ The app is split across several cooperating processes. Before using the exchange
 - TimescaleDB/Postgres for users, markets, orders, fills, and candle data
 - `apps/engine` for the single-writer matching/risk loop
 - `apps/api` for HTTP auth, trading, account, and market-data routes
-- `apps/db-puller` to persist engine events into Postgres/TimescaleDB
+- `apps/db-poller` to persist engine events into Postgres/TimescaleDB
 - `apps/wss` for realtime market and user channels
 - `apps/price-feeder` for external mark-price updates; index prices and liquidation checks depend on it
 
@@ -161,7 +161,7 @@ Run the core services in separate terminals:
 ```sh
 bun --filter @repo/engine dev
 bun --filter @repo/api dev
-bun --filter @repo/db-puller dev
+bun --filter @repo/db-poller dev
 bun --filter @repo/wss dev
 bun --filter @repo/price-feeder dev
 ```
@@ -191,7 +191,7 @@ The Docker setup provides:
 - a one-shot migration service for `packages/db/prisma`
 - `api`
 - `engine`
-- `db-puller`
+- `db-poller`
 - `wss`
 - `web`
 - `price-feeder`

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test"
 import type { EngineCommandType, EngineRequest } from "@repo/types";
 import { handleCommand } from "../engine/src/controller/engine.controller";
 import { BALANCES, FILLS, FUNDING_RATE_ACCOUMILATOR, INDEX_PRICES, LAST_FUNDING, MARK_PRICE_EWMA, MARKET_UPDATE_IDS, MARKETS, ORDERBOOKS, ORDERS, POSITIONS } from "../engine/src/engine-store";
-import { newMarket, subscribedMarkets } from "../price-feeder/src/helper/newMarket";
+import { getMarketSymbolsForFeedSymbol, newMarket, resetPriceFeederState, subscribedMarkets } from "../price-feeder/src/helper/newMarket";
 
 const WORKSPACE_ROOT = `${import.meta.dir}/../..`;
 const PORT = Number(process.env.TEST_API_PORT ?? "4210");
@@ -244,7 +244,7 @@ describe("api integration", () => {
     }
 
     startProcess("engine", ["bun", "apps/engine/index.ts"]);
-    startProcess("db-puller", ["bun", "apps/db-puller/index.ts"]);
+    startProcess("db-poller", ["bun", "apps/db-poller/index.ts"]);
     startProcess("api", ["bun", "apps/api/index.ts"]);
     await waitForApi();
   }, 20_000);
@@ -965,13 +965,14 @@ describe("engine commands", () => {
     expect(engineCommand("get_depth", { symbol: "CANCEL-USD" }).bids).toEqual([]);
   });
 
-  it("updates index prices without a response and rejects unknown commands", () => {
+  it("returns the mark price on index updates and rejects unknown commands", () => {
     const response = engineCommand("update_index_price", {
       symbol: "INDEX-USD",
       price: 123,
     });
 
-    expect(response).toBeUndefined();
+    // no orderbook for this symbol — mark price falls back to the index price
+    expect(response).toEqual({ symbol: "INDEX-USD", markPrice: 123, events: [] });
     expect(INDEX_PRICES.get("INDEX-USD")).toBe(123);
     expect(() =>
       handleCommand({
@@ -1095,11 +1096,127 @@ describe("engine commands", () => {
 
     expect(secondRate).toBe(firstRate);
   });
+
+  it("liquidates a position through update_index_price and returns a tagged synthetic order", () => {
+    engineCommand("create_market", {
+      marketId: "liq-market",
+      symbol: "LIQ-USD",
+      maxLeverage: 10,
+      minQty: 1,
+    });
+    engineCommand("add_balance", { userId: "liq-trader", amount: 10_000 });
+    engineCommand("add_balance", { userId: "liq-maker", amount: 10_000 });
+    engineCommand("add_balance", { userId: "liq-liquidity-buyer", amount: 10_000 });
+
+    // resting ask so the trader can open a long position
+    engineCommand("create_order", {
+      userId: "liq-maker",
+      symbol: "LIQ-USD",
+      orderType: "limit",
+      side: "sell",
+      price: 100,
+      qty: 10,
+      leverage: 1,
+    });
+
+    // opens a 10x long — liquidationPrice = 100 - floor(margin/qty) = 100 - 10 = 90
+    engineCommand("create_order", {
+      userId: "liq-trader",
+      symbol: "LIQ-USD",
+      orderType: "market",
+      side: "buy",
+      qty: 10,
+      leverage: 10,
+      slippageBps: 10_000,
+    });
+
+    // resting bid so the forced liquidation sell has somewhere to match (not ADL)
+    engineCommand("create_order", {
+      userId: "liq-liquidity-buyer",
+      symbol: "LIQ-USD",
+      orderType: "limit",
+      side: "buy",
+      price: 89,
+      qty: 10,
+      leverage: 1,
+    });
+
+    const response = engineCommand("update_index_price", { symbol: "LIQ-USD", price: 89 });
+
+    expect(response.symbol).toBe("LIQ-USD");
+    expect(response.markPrice).toBeNumber();
+    expect(Array.isArray(response.events)).toBe(true);
+    const liquidation = (response.events as Array<{ order: { userId: string; side: string }; fills: unknown[]; reason?: string }>)
+      .find((event) => event.order.userId === "liq-trader");
+
+    expect(liquidation).toBeDefined();
+    expect(liquidation!.reason).toBe("liquidation");
+    expect(liquidation!.order.side).toBe("sell");
+    expect(liquidation!.fills.length).toBeGreaterThan(0);
+  });
+
+  it("computes the EWMA mark price from the last traded price", () => {
+    engineCommand("create_market", {
+      marketId: "ewma-market",
+      symbol: "EWMA-USD",
+      maxLeverage: 10,
+      minQty: 1,
+    });
+    engineCommand("add_balance", { userId: "ewma-seller", amount: 20_000 });
+    engineCommand("add_balance", { userId: "ewma-buyer", amount: 20_000 });
+
+    engineCommand("create_order", {
+      userId: "ewma-seller",
+      symbol: "EWMA-USD",
+      orderType: "limit",
+      side: "sell",
+      price: 100,
+      qty: 5,
+      leverage: 1,
+    });
+    engineCommand("create_order", {
+      userId: "ewma-buyer",
+      symbol: "EWMA-USD",
+      orderType: "market",
+      side: "buy",
+      qty: 5,
+      leverage: 1,
+      slippageBps: 10_000,
+    });
+
+    // first tick: prevMark seeds from the index price -> 0.15*100 + 0.85*90 = 91.5
+    const first = engineCommand("update_index_price", { symbol: "EWMA-USD", price: 90 });
+    expect(first.markPrice).toBe(Math.round(0.15 * 100 + 0.85 * 90)); // 92
+    expect(MARK_PRICE_EWMA.get("EWMA-USD")).toBeCloseTo(91.5);
+
+    // second tick: converges toward last traded price -> 0.15*100 + 0.85*91.5 = 92.775
+    const second = engineCommand("update_index_price", { symbol: "EWMA-USD", price: 90 });
+    expect(second.markPrice).toBe(Math.round(0.15 * 100 + 0.85 * 91.5)); // 93
+    expect(MARK_PRICE_EWMA.get("EWMA-USD")).toBeCloseTo(92.775);
+  });
+
+  it("keeps the mark price at the index price for markets with no trades", () => {
+    engineCommand("create_market", {
+      marketId: "untraded-market",
+      symbol: "UNTRADED-USD",
+      maxLeverage: 10,
+      minQty: 1,
+    });
+
+    // lastTradedPrice is 0 — the EWMA must not decay toward it, and the
+    // funding accumulator must not collect poisoned samples
+    for (let i = 0; i < 3; i++) {
+      const response = engineCommand("update_index_price", { symbol: "UNTRADED-USD", price: 100 });
+      expect(response.markPrice).toBe(100);
+    }
+    expect(MARK_PRICE_EWMA.has("UNTRADED-USD")).toBe(false);
+    expect(FUNDING_RATE_ACCOUMILATOR.has("UNTRADED-USD")).toBe(false);
+  });
 });
 
 describe("price feeder", () => {
   beforeEach(() => {
-    subscribedMarkets.clear();
+    resetPriceFeederState();
   });
 
   it("subscribes to a Binance mark-price stream once per market", () => {
@@ -1127,5 +1244,51 @@ describe("price feeder", () => {
       },
     ]);
     expect(subscribedMarkets).toEqual(new Set(["BTC", "SOL"]));
+  });
+
+  it("fans a shared feed symbol out to every market on it, instead of the last one winning", () => {
+    // regression: two markets with the same base asset but different quote
+    // segments (e.g. "PUMP-PERP" and "PUMP-USD") both resolve to Binance
+    // feed symbol PUMPUSDT. The old implementation kept a single
+    // feedSymbol -> marketSymbol mapping, so the second newMarket() call
+    // silently overwrote the first — that market's index price went dead
+    // forever with no error anywhere in the pipeline.
+    const sentMessages: string[] = [];
+    const ws = {
+      send(message: string) {
+        sentMessages.push(message);
+      },
+    };
+
+    newMarket(ws as any, "PUMP-PERP");
+    newMarket(ws as any, "PUMP-USD");
+
+    // only one Binance SUBSCRIBE for the shared feed symbol — no duplicate stream
+    expect(sentMessages).toHaveLength(1);
+    expect(JSON.parse(sentMessages[0]!).params).toEqual(["pumpusdt@markPrice@1s"]);
+
+    // but both markets are still tracked and would both receive the tick
+    expect(getMarketSymbolsForFeedSymbol("PUMPUSDT")).toEqual(new Set(["PUMP-PERP", "PUMP-USD"]));
+  });
+
+  it("maps a base-quote market symbol to its base-asset Binance feed, ignoring the quote segment", () => {
+    // regression: toBinanceSymbol used to only strip "-"/"_"/"/" and append USDT,
+    // so "BTC-PERP" became the bogus feed symbol "BTCPERPUSDT" — Binance silently
+    // ACKs a SUBSCRIBE to it but never pushes data, so index prices went dead
+    // with no error anywhere in the pipeline.
+    const sentMessages: string[] = [];
+    const ws = {
+      send(message: string) {
+        sentMessages.push(message);
+      },
+    };
+
+    newMarket(ws as any, "BTC-PERP");
+    newMarket(ws as any, "ETH-USD");
+
+    expect(sentMessages.map((message) => JSON.parse(message).params[0])).toEqual([
+      "btcusdt@markPrice@1s",
+      "ethusdt@markPrice@1s",
+    ]);
   });
 });
