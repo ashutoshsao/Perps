@@ -1,10 +1,18 @@
 import { getRedisClient } from "@repo/redis";
-import { EngineRequest, REDIS_KEYS, RedisResponseType, UpdateIndexPriceResponse } from "@repo/types";
+import { CancelOrderResponse, CreateOrderResponse, EngineRequest, OrderRecord, REDIS_KEYS, RedisResponseType, UpdateIndexPriceResponse } from "@repo/types";
 import { handleCommand } from "./src/controller/engine.controller";
 import { loadSnapshot, saveSnapshot } from "./src/helper/snapshot";
+import { ORDERS } from "./src/engine-store";
 const readClient = getRedisClient()
 const writeClient = getRedisClient()
 type RedisClient = Awaited<ReturnType<typeof getRedisClient>>
+
+function evictIfTerminal(order: OrderRecord | undefined) {
+  if (!order) return;
+  if (order.status === "filled" || order.status === "cancelled") {
+    ORDERS.delete(order.orderId);
+  }
+}
 const GLOBAL_EVENTS = new Set([
   "funding_rate",
   "create_order",
@@ -74,6 +82,11 @@ async function startUp() {
                 error: '',
                 data: JSON.stringify(response),
               })
+
+              for (const event of events) {
+                evictIfTerminal(event.order);
+                event.makerOrders.forEach(evictIfTerminal);
+              }
             }
             continue;
           }
@@ -87,6 +100,15 @@ async function startUp() {
               error: '',
               data: JSON.stringify(response),
             })
+
+            if (type === "create_order") {
+              const { order, makerOrders } = response as CreateOrderResponse;
+              evictIfTerminal(order);
+              makerOrders.forEach(evictIfTerminal);
+            } else if (type === "cancel_order") {
+              const { order } = response as CancelOrderResponse;
+              evictIfTerminal(order);
+            }
           } else {
             await writeRedis.xAdd(responseQueue, '*', {
               type,

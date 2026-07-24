@@ -1,14 +1,28 @@
-import { Balance, Fill, Market, OrderRecord, Position, RestingOrder } from "@repo/types";
-import { BALANCES, FILLS, INDEX_PRICES, MARKET_UPDATE_IDS, MARKETS, ORDERBOOKS, ORDERS, POSITIONS } from "../engine-store";
-import fs from "fs/promises";
+import { Balance, Market, OrderRecord, Position, RestingOrder } from "@repo/types";
+import { BALANCES, INDEX_PRICES, MARKET_UPDATE_IDS, MARKETS, ORDERBOOKS, ORDERS, POSITIONS } from "../engine-store";
 import BTree from "sorted-btree";
+import { DeleteObjectsCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
-const SNAPSHOT_DIR = "../../data/snapshots";
+function getEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`env ${name} not present`);
+  return value;
+}
+
+const R2_BUCKET = getEnv("R2_BUCKET");
+
+const r2 = new S3Client({
+  region: "auto",
+  endpoint: `https://${getEnv("R2_ACCOUNT_ID")}.r2.cloudflarestorage.com`,
+  credentials: {
+    accessKeyId: getEnv("R2_ACCESS_KEY_ID"),
+    secretAccessKey: getEnv("R2_SECRET_ACCESS_KEY"),
+  },
+});
+
 const MAX_SNAPSHOTS = 10;
 
 export async function saveSnapshot(lastSeenStreamId: string) {
-  await fs.mkdir(SNAPSHOT_DIR, { recursive: true });
-
   let serializedPositions: Record<string, Record<string, Position>> = {};
   for (const [userId, innerMap] of POSITIONS) {
     serializedPositions[userId] = Object.fromEntries(innerMap)
@@ -52,35 +66,52 @@ export async function saveSnapshot(lastSeenStreamId: string) {
       orders: Object.fromEntries(ORDERS),
       positions: serializedPositions,
       balances: serializedbalances,
-      fills: Object.fromEntries(FILLS),
       markets: Object.fromEntries(MARKETS),
       index_prices: Object.fromEntries(INDEX_PRICES),
       marketUpdateIds: Object.fromEntries(MARKET_UPDATE_IDS)
     }
   }
 
-  const tmpPath = `${SNAPSHOT_DIR}/.tmp_${lastSeenStreamId}.json`;
-  const finalPath = `${SNAPSHOT_DIR}/${lastSeenStreamId}.json`;
-  await fs.writeFile(tmpPath, JSON.stringify(snapshot));
-  await fs.rename(tmpPath, finalPath);
+  await r2.send(new PutObjectCommand({
+    Bucket: R2_BUCKET,
+    Key: `${lastSeenStreamId}.json`,
+    Body: JSON.stringify(snapshot),
+    ContentType: "application/json",
+  }));
 
   await cleanupOldSnapshots();
 }
 
+async function listSnapshotKeys(): Promise<string[]> {
+  const keys: string[] = [];
+  let continuationToken: string | undefined;
+
+  do {
+    const result = await r2.send(new ListObjectsV2Command({
+      Bucket: R2_BUCKET,
+      ContinuationToken: continuationToken,
+    }));
+    for (const obj of result.Contents ?? []) {
+      if (obj.Key) keys.push(obj.Key);
+    }
+    continuationToken = result.NextContinuationToken;
+  } while (continuationToken);
+
+  return keys.sort();
+}
+
 export async function loadSnapshot(): Promise<string> {
   try {
-    await fs.mkdir(SNAPSHOT_DIR, { recursive: true });
-
-    //find all snapshot fills
-    const files = await fs.readdir(SNAPSHOT_DIR);
-    const snapshots = files
-      .filter(f => f.endsWith('.json') && !f.startsWith('.tmp'))
-      .sort();
+    const snapshots = await listSnapshotKeys();
     if (snapshots.length === 0) return '0-0';
 
     //load latest
-    const latest = snapshots[snapshots.length - 1];
-    const content = await fs.readFile(`${SNAPSHOT_DIR}/${latest}`, 'utf-8');
+    const latest = snapshots[snapshots.length - 1]!;
+    const object = await r2.send(new GetObjectCommand({
+      Bucket: R2_BUCKET,
+      Key: latest,
+    }));
+    const content = await object.Body!.transformToString();
     const { lastSeenStreamId, state } = JSON.parse(content);
 
     // restore state
@@ -93,11 +124,6 @@ export async function loadSnapshot(): Promise<string> {
     //markets
     for (const [symbol, market] of Object.entries(state.markets)) {
       MARKETS.set(symbol, market as Market)
-    }
-
-    //fills
-    for (const [symbol, fills] of Object.entries(state.fills)) {
-      FILLS.set(symbol, fills as Fill[]);
     }
 
     //index_prices
@@ -165,15 +191,13 @@ export async function loadSnapshot(): Promise<string> {
 }
 
 async function cleanupOldSnapshots() {
-  const files = await fs.readdir(SNAPSHOT_DIR);
-  const snapshot = files
-    .filter(f => f.endsWith(`.json`) && !f.startsWith(`.tmp`))
-    .sort()
+  const snapshots = await listSnapshotKeys();
 
-  if (snapshot.length > MAX_SNAPSHOTS) {
-    const toDelete = snapshot.slice(0, snapshot.length - MAX_SNAPSHOTS);
-    for (const file of toDelete) {
-      await fs.unlink(`${SNAPSHOT_DIR}/${file}`);
-    }
+  if (snapshots.length > MAX_SNAPSHOTS) {
+    const toDelete = snapshots.slice(0, snapshots.length - MAX_SNAPSHOTS);
+    await r2.send(new DeleteObjectsCommand({
+      Bucket: R2_BUCKET,
+      Delete: { Objects: toDelete.map(Key => ({ Key })) },
+    }));
   }
 }

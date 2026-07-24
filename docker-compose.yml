@@ -43,8 +43,6 @@ services:
       dockerfile: apps/engine/Dockerfile
     env_file:
       - .env.docker
-    volumes:
-      - engine-snapshots:/app/data/snapshots
     depends_on:
       redis:
         condition: service_healthy
@@ -140,4 +138,3 @@ services:
 volumes:
   redis-data:
   timescaledb-data:
-  engine-snapshots:
