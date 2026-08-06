@@ -29,6 +29,9 @@ report.*.json
 data/snapshots/*
 !data/snapshots/.gitkeep
 
+# k8s manifests contain base64-encoded secrets, not encrypted
+k8s/
+
 # Environment files
 .env
 .env.*
