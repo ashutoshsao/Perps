@@ -1,4 +1,4 @@
-# Perps Architecture
+# Nebula Architecture
 
 This repo implements a centralized perpetual futures exchange. The backend is complete for the current version; the frontend in `apps/web` is now being built as the exchange client.
 

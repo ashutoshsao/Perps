@@ -1,8 +1,8 @@
-# Perps
+# Nebula
 
 A TypeScript/Bun playground for the core of a perpetual futures exchange: an HTTP API at the edge, Redis Streams as the command bus, and a single in-memory matching engine that owns all trading state.
 
-It's built around the hard parts of an exchange — matching, margin locks, position netting, liquidation, funding-rate settlement, and snapshot recovery — not just "place an order and save it to a table."
+Covers matching, margin locks, position netting, liquidation, funding-rate settlement, and snapshot recovery.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./perps-v2.svg">
@@ -10,27 +10,9 @@ It's built around the hard parts of an exchange — matching, margin locks, posi
   <img alt="Architecture diagram" src="./perps-v2.svg">
 </picture>
 
-```txt
-client
-  |
-  v
-Express API  --validates auth + Zod-->  Redis Stream (to_engine)
-                                              |
-                                              v
-                                      Engine process
-                                (single writer: books, orders,
-                                 balances, positions)
-                                              |
-                                              v
-                          Redis response stream / global event stream
-                                              |
-                                              v
-                                        API response
-```
-
 ## Core Idea
 
-The API never mutates exchange state directly. `POST /api/order` becomes a typed `create_order` command with a `correlationId`, written to Redis. The engine reads commands sequentially, runs matching/risk logic, and writes the result back. That gives the order book a single authority — no races.
+The API never mutates exchange state directly. `POST /api/order` becomes a typed `create_order` command with a `correlationId`, written to Redis. The engine reads commands sequentially, runs matching/risk logic, and writes the result back. That gives the order book a single authority, with no races.
 
 Engine state lives in memory:
 
@@ -185,7 +167,7 @@ The order book uses `BTree<number, RestingOrder[]>` so asks/bids traverse low-to
 
 Snapshots serialize the engine's maps (including BTree contents) and upload them to R2, keeping the last 10. On restart, the engine loads the latest snapshot and resumes reading Redis from the saved stream ID.
 
-Curious about the *why* behind these choices (single-writer engine, Redis Streams as the bus, integer cents, snapshot/replay recovery, bots-as-demo-data)? See [DECISIONS.md](./DECISIONS.md).
+For the reasoning behind these choices (single-writer engine, Redis Streams as the bus, integer cents, snapshot/replay recovery, bots-as-demo-data), see [DECISIONS.md](./DECISIONS.md).
 
 ## Current Rough Edges
 
@@ -196,12 +178,3 @@ This is a prototype, not a production exchange:
 - Liquidation math, insurance funds, fees, realized PnL, bankruptcy prices, and ADL ranking are simplified.
 - `apps/web` is a Vite + React scaffold, still under active development.
 
-## What To Read First
-
-- `apps/engine/src/handler/createOrder.ts` — matching, margin locks, fills, position updates
-- `apps/engine/src/helper/matchOrder.ts` — book traversal
-- `apps/engine/src/helper/updatePosition.ts` — position netting
-- `apps/api/service/loopBack.ts` — Redis command/response correlation
-- `apps/tests/index.test.ts` — intended behavior end-to-end
-
-The interesting part isn't the endpoint list — it's the boundary between an ordinary web API and a stateful exchange engine, and how much simpler the system gets once that boundary is explicit.

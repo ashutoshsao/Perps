@@ -1,7 +1,7 @@
 import type { Market } from "../api/types";
 
-export const AUTH_TOKEN_KEY = "perps.auth.token";
-export const AUTH_USERNAME_KEY = "perps.auth.username";
+export const AUTH_TOKEN_KEY = "nebula.auth.token";
+export const AUTH_USERNAME_KEY = "nebula.auth.username";
 export const slippagePresetPercents = [0.1, 0.5, 1, 2, 5];
 export const primaryMarketOrder = ["BTC", "ETH", "SOL"];
 export const fallbackMarkets: Market[] = [
