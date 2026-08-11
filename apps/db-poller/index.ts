@@ -6,7 +6,7 @@ const readRedis = getRedisClient();
 
 const DB_EVENTS = new Set(["update_index_price", "funding_rate", "create_order", "cancel_order"]);
 const GROUP = "db-puller"
-const CONSUMER = "db-puller-1"
+const CONSUMER = `dbPoller-${crypto.randomUUID()}`
 
 async function dbPuller() {
   const client = await readRedis;
