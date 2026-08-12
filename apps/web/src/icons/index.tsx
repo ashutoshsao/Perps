@@ -244,3 +244,19 @@ export function BitcoinGlyph({ size = 22, ...p }: IconProps) {
 export function FireEmoji({ size = 14 }: { size?: number }) {
   return <span style={{ fontSize: size, lineHeight: 1 }}>🔥</span>;
 }
+
+export function MenuIcon({ size = 20, ...p }: IconProps) {
+  return (
+    <svg {...base(size)} {...p}>
+      <path d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+  );
+}
+
+export function CloseIcon({ size = 18, ...p }: IconProps) {
+  return (
+    <svg {...base(size)} {...p}>
+      <path d="M18 6L6 18M6 6l12 12" />
+    </svg>
+  );
+}

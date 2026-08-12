@@ -89,6 +89,19 @@ const RANGE_SECONDS: Record<string, number | null> = {
   "1d": 86400,
 };
 
+// only called on initial load / explicit range change, never on a routine candle tick
+function applyVisibleRange(chart: IChartApi | null, candles: Candle[], range: string) {
+  if (!chart || candles.length === 0) return;
+
+  const seconds = RANGE_SECONDS[range];
+  if (seconds == null) {
+    chart.timeScale().fitContent();
+  } else {
+    const lastTime = toTime(candles[candles.length - 1]!.bucket);
+    chart.timeScale().setVisibleRange({ from: (lastTime - seconds) as UTCTimestamp, to: lastTime });
+  }
+}
+
 export function PriceChart({
   candles,
   showVolume,
@@ -104,6 +117,9 @@ export function PriceChart({
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+  const candlesRef = useRef(candles);
+  candlesRef.current = candles;
+  const dataReadyRef = useRef(false);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -158,17 +174,19 @@ export function PriceChart({
     candleSeriesRef.current?.setData(padWithWhitespace(toCandlestickData(candles), intervalSeconds));
     volumeSeriesRef.current?.setData(showVolume ? toVolumeData(candles) : []);
 
-    const chart = chartRef.current;
-    if (!chart || candles.length === 0) return;
-
-    const seconds = RANGE_SECONDS[range];
-    if (seconds == null) {
-      chart.timeScale().fitContent();
-    } else {
-      const lastTime = toTime(candles[candles.length - 1]!.bucket);
-      chart.timeScale().setVisibleRange({ from: (lastTime - seconds) as UTCTimestamp, to: lastTime });
+    if (candles.length === 0) {
+      // symbol switched (or still loading) — re-fit once real data lands again
+      dataReadyRef.current = false;
+    } else if (!dataReadyRef.current) {
+      dataReadyRef.current = true;
+      applyVisibleRange(chartRef.current, candles, range);
     }
-  }, [candles, showVolume, range, interval]);
+  }, [candles, showVolume, interval]);
+
+  useEffect(() => {
+    if (!dataReadyRef.current) return;
+    applyVisibleRange(chartRef.current, candlesRef.current, range);
+  }, [range, interval]);
 
   return <div ref={containerRef} className="absolute inset-0" />;
 }

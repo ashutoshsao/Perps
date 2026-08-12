@@ -86,7 +86,7 @@ function DisabledCheckbox({ label }: { label: string }) {
   );
 }
 
-export function OrderTicketPanel() {
+export function OrderTicketPanel({ variant = "desktop" }: { variant?: "desktop" | "mobile" } = {}) {
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [orderType, setOrderType] = useState<"Limit" | "Market">("Limit");
   const [leverage, setLeverage] = useState(1);
@@ -113,12 +113,13 @@ export function OrderTicketPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [market?.symbol]);
 
+  const isMobile = variant === "mobile";
+
   if (!market) {
-    return (
-      <div className="flex w-[336px] shrink-0 items-center justify-center border-l border-border-soft bg-panel p-4 text-[13px] text-text-dim">
-        Loading markets...
-      </div>
-    );
+    const loadingClass = isMobile
+      ? "flex w-full items-center justify-center bg-panel p-4 text-[13px] text-text-dim"
+      : "flex w-[336px] shrink-0 items-center justify-center border-l border-border-soft bg-panel p-4 text-[13px] text-text-dim";
+    return <div className={loadingClass}>Loading markets...</div>;
   }
   const activeMarket = market;
 
@@ -186,8 +187,12 @@ export function OrderTicketPanel() {
     }
   }
 
+  const rootClass = isMobile
+    ? "flex w-full flex-col gap-4 bg-panel p-4"
+    : "flex w-[336px] shrink-0 flex-col gap-4 overflow-y-auto border-l border-border-soft bg-panel p-4";
+
   return (
-    <div className="flex w-[336px] shrink-0 flex-col gap-4 overflow-y-auto border-l border-border-soft bg-panel p-4">
+    <div className={rootClass}>
       <div className="grid grid-cols-2 gap-2">
         <button
           type="button"

@@ -5,7 +5,6 @@ import { useAsyncData } from "../hooks/useAsyncData";
 import { useMarkPrice } from "../hooks/useMarkPrice";
 import { useIndexPrice } from "../hooks/useIndexPrice";
 import { useFundingRate } from "../hooks/useFundingRate";
-import { fallbackMarkets } from "../lib/constants";
 import { sortMarkets } from "../lib/markets";
 
 type MarketContextValue = {
@@ -32,10 +31,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
   const refreshMarkets = () => setMarketsRefreshKey((k) => k + 1);
   const marketsState = useAsyncData(() => api.getMarkets(), [marketsRefreshKey]);
   const rawMarkets = marketsState.data?.markets ?? [];
-  const markets = useMemo(
-    () => sortMarkets(rawMarkets.length ? rawMarkets : fallbackMarkets),
-    [rawMarkets],
-  );
+  const markets = useMemo(() => sortMarkets(rawMarkets), [rawMarkets]);
 
   const [symbol, setSymbol] = useState("");
 

@@ -4,6 +4,7 @@ import { TopNav } from "./components/layout/TopNav";
 import { MarketStrip } from "./components/layout/MarketStrip";
 import { BottomPanel } from "./components/layout/BottomPanel";
 import { FooterTicker } from "./components/layout/FooterTicker";
+import { MobileLayout } from "./components/layout/MobileLayout";
 import { ChartPanel } from "./features/chart/ChartPanel";
 import { OrderBookPanel } from "./features/orderbook/OrderBookPanel";
 import { OrderTicketPanel } from "./features/ticket/OrderTicketPanel";
@@ -15,8 +16,11 @@ import { MarketProvider } from "./context/MarketContext";
 import { TradingProvider } from "./context/TradingContext";
 import { OrdersProvider } from "./context/OrdersContext";
 import { TicketProvider } from "./context/TicketContext";
+import { useIsMobile } from "./hooks/useIsMobile";
 
 export function App() {
+  const isMobile = useIsMobile();
+
   return (
     <ToastProvider>
       <AuthProvider>
@@ -24,23 +28,27 @@ export function App() {
           <TradingProvider>
             <OrdersProvider>
               <TicketProvider>
-                <div className="flex h-screen min-w-[1200px] flex-col bg-bg text-text">
-                  <TopNav />
+                {isMobile ? (
+                  <MobileLayout />
+                ) : (
+                  <div className="flex h-screen min-w-[1200px] flex-col bg-bg text-text">
+                    <TopNav />
 
-                  <div className="flex min-h-0 flex-1">
-                    <div className="flex min-h-0 flex-1 flex-col">
-                      <MarketStrip />
-                      <div className="flex min-h-0 flex-1">
-                        <ChartPanel />
-                        <OrderBookPanel />
+                    <div className="flex min-h-0 flex-1">
+                      <div className="flex min-h-0 flex-1 flex-col">
+                        <MarketStrip />
+                        <div className="flex min-h-0 flex-1">
+                          <ChartPanel />
+                          <OrderBookPanel />
+                        </div>
+                        <BottomPanel />
                       </div>
-                      <BottomPanel />
+                      <OrderTicketPanel />
                     </div>
-                    <OrderTicketPanel />
-                  </div>
 
-                  <FooterTicker />
-                </div>
+                    <FooterTicker />
+                  </div>
+                )}
                 <AuthModal />
                 <NotificationListener />
               </TicketProvider>

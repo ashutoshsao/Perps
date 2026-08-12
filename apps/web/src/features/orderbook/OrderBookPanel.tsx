@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { TextTabs } from "../../components/ui/Tabs";
 import { DepthBuyIcon, DepthFullIcon, DepthSplitIcon, LockIcon, MinusIcon, PlusIcon } from "../../icons";
 import { useTrading } from "../../context/TradingContext";
@@ -32,11 +33,14 @@ function withTotals(entries: [number, number][]) {
   return { rows, maxTotal: cumulative };
 }
 
+const BAR_TRANSITION = { duration: 0.2, ease: "easeOut" as const };
+
 function Row({
   price,
   qty,
   total,
   depth,
+  ownDepth,
   side,
   onClick,
 }: {
@@ -44,28 +48,58 @@ function Row({
   qty: number;
   total: number;
   depth: number;
+  ownDepth: number;
   side: "ask" | "bid";
   onClick: () => void;
 }) {
   const color = side === "ask" ? "text-red" : "text-green";
   const barColor = side === "ask" ? "bg-red-dim" : "bg-green-dim";
+  const ownBarColor = side === "ask" ? "bg-red/25" : "bg-green/25";
 
   return (
-    <button
+    <motion.button
+      layout="position"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ layout: BAR_TRANSITION, opacity: { duration: 0.15 } }}
       type="button"
       onClick={onClick}
       className="relative grid w-full grid-cols-3 px-3 py-[3px] text-left text-[12px] hover:bg-surface"
     >
-      <div className={`absolute inset-y-0 right-0 ${barColor}`} style={{ width: `${depth}%` }} />
+      <motion.div
+        className={`absolute inset-y-0 right-0 ${barColor}`}
+        initial={false}
+        animate={{ width: `${depth}%` }}
+        transition={BAR_TRANSITION}
+      />
+      <motion.div
+        className={`absolute inset-y-0 right-0 ${ownBarColor}`}
+        initial={false}
+        animate={{ width: `${ownDepth}%` }}
+        transition={BAR_TRANSITION}
+      />
       <span className={`relative z-10 ${color}`}>{formatUsd(price)}</span>
       <span className="relative z-10 text-right text-text">{formatNumber(qty)}</span>
       <span className="relative z-10 text-right text-text-muted">{formatNumber(total)}</span>
-    </button>
+    </motion.button>
   );
 }
 
-export function OrderBookPanel() {
-  const [tab, setTab] = useState("Book");
+export function OrderBookPanel({
+  variant = "desktop",
+  tab: controlledTab,
+  onTabChange,
+  hideTabs = false,
+}: {
+  variant?: "desktop" | "mobile";
+  tab?: string;
+  onTabChange?: (tab: string) => void;
+  hideTabs?: boolean;
+} = {}) {
+  const [internalTab, setInternalTab] = useState("Book");
+  const tab = controlledTab ?? internalTab;
+  const setTab = onTabChange ?? setInternalTab;
   const [groupIdx, setGroupIdx] = useState(0);
   const [viewMode, setViewMode] = useState<ViewMode>("full");
   const [locked, setLocked] = useState(false);
@@ -99,11 +133,18 @@ export function OrderBookPanel() {
   const visibleAsks = viewMode === "buy" ? [] : asks;
   const lastTrade = trades[0];
 
+  const rootClass =
+    variant === "mobile"
+      ? "flex h-full w-full flex-col bg-panel"
+      : "flex w-[300px] shrink-0 flex-col border-r border-border-soft bg-panel";
+
   return (
-    <div className="flex w-[300px] shrink-0 flex-col border-r border-border-soft bg-panel">
-      <div className="flex h-11 shrink-0 items-center justify-between border-b border-border-soft px-4">
-        <TextTabs items={["Book", "Trades"]} active={tab} onChange={setTab} />
-      </div>
+    <div className={rootClass}>
+      {!hideTabs && (
+        <div className="flex h-11 shrink-0 items-center justify-between border-b border-border-soft px-4">
+          <TextTabs items={["Book", "Trades"]} active={tab} onChange={setTab} />
+        </div>
+      )}
 
       <div className="flex h-9 shrink-0 items-center justify-between border-b border-border-soft px-3">
         <div className="flex items-center gap-3 text-text-muted">
@@ -157,17 +198,20 @@ export function OrderBookPanel() {
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-              {visibleAsks.map((a) => (
-                <Row
-                  key={a.price}
-                  side="ask"
-                  price={a.price}
-                  qty={a.qty}
-                  total={a.total}
-                  depth={(a.total / maxTotal) * 100}
-                  onClick={() => setPrice(String(usd(a.price)))}
-                />
-              ))}
+              <AnimatePresence initial={false}>
+                {visibleAsks.map((a) => (
+                  <Row
+                    key={a.price}
+                    side="ask"
+                    price={a.price}
+                    qty={a.qty}
+                    total={a.total}
+                    depth={(a.total / maxTotal) * 100}
+                    ownDepth={(a.qty / maxTotal) * 100}
+                    onClick={() => setPrice(String(usd(a.price)))}
+                  />
+                ))}
+              </AnimatePresence>
 
               <div className="flex shrink-0 items-baseline gap-2 px-3 py-1.5">
                 <span
@@ -181,23 +225,31 @@ export function OrderBookPanel() {
                 </span>
               </div>
 
-              {bids.map((b) => (
-                <Row
-                  key={b.price}
-                  side="bid"
-                  price={b.price}
-                  qty={b.qty}
-                  total={b.total}
-                  depth={(b.total / maxTotal) * 100}
-                  onClick={() => setPrice(String(usd(b.price)))}
-                />
-              ))}
+              <AnimatePresence initial={false}>
+                {bids.map((b) => (
+                  <Row
+                    key={b.price}
+                    side="bid"
+                    price={b.price}
+                    qty={b.qty}
+                    total={b.total}
+                    depth={(b.total / maxTotal) * 100}
+                    ownDepth={(b.qty / maxTotal) * 100}
+                    onClick={() => setPrice(String(usd(b.price)))}
+                  />
+                ))}
+              </AnimatePresence>
             </div>
 
             <div className="flex h-6 shrink-0 text-[11px] font-semibold">
-              <div className="flex items-center bg-green pl-2 text-black/80" style={{ width: `${buyRatio}%` }}>
+              <motion.div
+                className="flex items-center bg-green pl-2 text-black/80"
+                initial={false}
+                animate={{ width: `${buyRatio}%` }}
+                transition={BAR_TRANSITION}
+              >
                 {buyRatio}%
-              </div>
+              </motion.div>
               <div className="flex flex-1 items-center justify-end bg-red pr-2 text-white">{sellRatio}%</div>
             </div>
           </div>
@@ -217,9 +269,9 @@ export function OrderBookPanel() {
             </div>
           ) : (
             <div className="flex flex-1 flex-col overflow-y-auto">
-              {trades.map((t, i) => (
+              {trades.map((t) => (
                 <button
-                  key={i}
+                  key={`${t.time}-${t.price}-${t.qty}-${t.side}`}
                   type="button"
                   onClick={() => setPrice(String(usd(t.price)))}
                   className="grid grid-cols-3 px-3 py-[3px] text-left text-[12px] hover:bg-surface"

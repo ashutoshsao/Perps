@@ -53,9 +53,13 @@ export function ChartPanel() {
 
   return (
     <div ref={containerRef} className="flex min-h-0 min-w-0 flex-1 flex-col border-r border-border-soft bg-bg">
-      <div className="flex h-11 shrink-0 items-center justify-between border-b border-border-soft px-4">
-        <TextTabs items={chartTabs} active={tab} onChange={setTab} />
-        <SegmentedControl items={["Last", "Mark", "Index"]} active={priceSource} onChange={setPriceSource} />
+      <div className="flex h-11 shrink-0 items-center justify-between gap-4 overflow-x-auto border-b border-border-soft px-4">
+        <div className="shrink-0">
+          <TextTabs items={chartTabs} active={tab} onChange={setTab} />
+        </div>
+        <div className="shrink-0">
+          <SegmentedControl items={["Last", "Mark", "Index"]} active={priceSource} onChange={setPriceSource} />
+        </div>
       </div>
 
       <ChartToolbar
@@ -91,8 +95,8 @@ export function ChartPanel() {
         )}
       </div>
 
-      <div className="flex h-9 shrink-0 items-center justify-between border-t border-border-soft px-3">
-        <div className="flex items-center gap-4">
+      <div className="flex h-9 shrink-0 items-center justify-between gap-4 overflow-x-auto border-t border-border-soft px-3">
+        <div className="flex shrink-0 items-center gap-4">
           {ranges.map((r) => (
             <button
               key={r}
@@ -107,7 +111,7 @@ export function ChartPanel() {
           ))}
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex shrink-0 items-center gap-4">
           <span className="text-[12px] text-text-muted">{ticker ? "Live" : "-"}</span>
           {scaleToggles.map((s) => (
             <button
