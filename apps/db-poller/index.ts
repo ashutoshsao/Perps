@@ -5,10 +5,10 @@ import { updateDb } from "./src/updateDb";
 const readRedis = getRedisClient();
 
 const DB_EVENTS = new Set(["update_index_price", "funding_rate", "create_order", "cancel_order"]);
-const GROUP = "db-puller"
+const GROUP = "db-poller"
 const CONSUMER = `dbPoller-${crypto.randomUUID()}`
 
-async function dbPuller() {
+async function dbPoller() {
   const client = await readRedis;
   try {
     await client.xGroupCreate(REDIS_KEYS.engineEvents, GROUP, '0', { MKSTREAM: true })
@@ -48,4 +48,4 @@ async function dbPuller() {
   }
 }
 
-dbPuller().catch(() => process.exit(1))
+dbPoller().catch(() => process.exit(1))
