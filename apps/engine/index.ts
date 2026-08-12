@@ -131,8 +131,12 @@ async function startUp() {
       }
     }
     if (Date.now() - lastSnapshotTime > SNAPSHOT_INTERVAL) {
-      await saveSnapshot(lastSeenId)
-      lastSnapshotTime = Date.now()
+      try {
+        await saveSnapshot(lastSeenId)
+        lastSnapshotTime = Date.now()
+      } catch (err) {
+        console.log(`Snapshot save failed, will retry next interval: ${(err as Error).message}`)
+      }
     }
   }
 }
