@@ -125,6 +125,14 @@ docker compose down       # stop
 docker compose down -v    # stop and wipe Redis/Postgres data
 ```
 
+## Production Deployment
+
+Runs live on GKE: `nebula.ashutoshsao.com` (frontend, on Vercel), `api.nebula.ashutoshsao.com`, `ws.nebula.ashutoshsao.com` (backend services, in-cluster).
+
+TimescaleDB and Redis are self-hosted in-cluster (StatefulSets + PVCs), not managed services — needed for TimescaleDB's hypertable/continuous-aggregate features, which aren't available on managed Postgres providers. `ingress-nginx` + `cert-manager` handle routing and TLS.
+
+All k8s manifests, secrets (SOPS-encrypted), and the ingress/backup config live in a separate private `ops` repo, not here — that's the source of truth for anything infra-related.
+
 ## Example Flow
 
 ```sh
@@ -174,7 +182,6 @@ For the reasoning behind these choices (single-writer engine, Redis Streams as t
 This is a prototype, not a production exchange:
 
 - Single-process, in-memory matching engine.
-- Engine fills aren't fully persisted back to Postgres yet.
 - Liquidation math, insurance funds, fees, realized PnL, bankruptcy prices, and ADL ranking are simplified.
 - `apps/web` is a Vite + React scaffold, still under active development.
 

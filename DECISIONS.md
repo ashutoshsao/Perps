@@ -22,13 +22,13 @@ Floating-point rounding errors compound silently across fills, netting, and fund
 
 ## Price-feeder discovers markets instead of being told about them
 
-`price-feeder` doesn't hardcode symbols. On boot it reads the engine's event stream for `create_market` events, subscribes to future ones, and also calls `get_markets` to get the current set directly (covering markets created before it started). It then subscribes to Binance mark prices for that set and forwards index-price updates back to the engine.
+`price-feeder` doesn't hardcode symbols. On boot it subscribes to the engine's event stream for `create_market` events *first*, then calls `get_markets` to backfill whatever markets already existed. The order matters: subscribing before backfilling means a market created in that gap still gets picked up, instead of falling through a race window. It then subscribes to Binance mark prices for the full set and forwards index-price updates back to the engine.
 
 Result: adding a market never requires touching or restarting `price-feeder`.
 
 ## WSS as a cluster with pub/sub fan-out
 
-`apps/wss` is built to run as a cluster (today's docker-compose runs a single instance, but the fan-out mechanism doesn't assume that): each server would hold a subset of client connections, and engine events are fanned out via Redis pub/sub — any instance that reads an event off the stream publishes it, and every instance delivers it to whichever local connections care.
+`apps/wss` is built to run as a cluster (today's docker-compose runs a single instance, but the fan-out mechanism doesn't assume that): each server would hold a subset of client connections. Reading engine events happens through a Redis consumer group, so each event is picked up by exactly one `wss` instance — that instance republishes it via Redis pub/sub, and every instance (including itself) delivers it to whichever local connections care.
 
 This decouples "who received the event" from "who holds the relevant socket," which is what would make the WebSocket layer horizontally scalable without sticky sessions, once run as more than one instance.
 
@@ -37,6 +37,8 @@ This decouples "who received the event" from "who holds the relevant socket," wh
 Order and fill IDs are derived from the Redis stream entry ID that carried the command (its timestamp component), not from `uuid()` or `Date.now()`.
 
 This makes replay deterministic. If the engine crashes and reprocesses commands from the last snapshot, IDs generated at process-time would come out different on replay, breaking references (fills → orders, rows already written by `db-poller`). Deriving IDs from stream position means the same command always produces the same ID, first run or tenth.
+
+The same property is what makes `db-poller`'s writes safe to reprocess: it upserts by that same deterministic ID rather than inserting. A redelivered stream message — consumer-group crash, restart, rebalance, anything that causes the same entry to be read twice — overwrites cleanly on the second pass instead of erroring on a duplicate key or writing a duplicate row.
 
 ## Snapshot-to-R2 + stream-ID replay instead of writing every mutation to Postgres
 
@@ -53,6 +55,5 @@ An empty order book doesn't demo or feel real. Bots trading through the actual A
 ## Current known gaps
 
 - Single-process engine — no horizontal scaling story yet.
-- Engine fills aren't fully persisted back to Postgres.
 - Liquidation math, insurance funds, fees, realized PnL, bankruptcy prices, and ADL ranking are simplified, not production-grade.
 - `apps/web` is an active work in progress, not a finished client.

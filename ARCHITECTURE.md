@@ -13,6 +13,10 @@ This repo implements a centralized perpetual futures exchange. The backend is co
 - `packages/db`: Prisma Postgres client plus Timescale helpers.
 - `packages/types`: shared API schemas, engine payloads, market data, and event types.
 
+## Deployment
+
+`engine`, `api`, `wss`, `db-poller`, `price-feeder`, and `market-maker` all run as separate Deployments on GKE, in the `perps-app` namespace. `apps/web` deploys separately to Vercel — it's not part of the cluster. TimescaleDB and Redis are self-hosted in-cluster (StatefulSets + PVCs), not managed services. `ingress-nginx` + `cert-manager` route `api.nebula.ashutoshsao.com` / `ws.nebula.ashutoshsao.com` with real TLS. All manifests and secrets live in a separate `ops` repo — see that repo for the actual infra source of truth.
+
 ## Units
 
 Money is integer cents everywhere outside the browser: order prices, index/mark prices, balances, margins, and funding payments. Quantities are integer base units of the asset. Floats never enter the engine or the wire — the web app converts cents to dollars only when rendering (`usd()` / `formatUsd()`) and dollars back to cents only when parsing user input (`parseUsdToCents()`).
