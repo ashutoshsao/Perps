@@ -1,4 +1,4 @@
-import { createOrderPayload, OrderRecord, RestingOrder } from "@repo/types";
+import { createOrderPayload, OrderRecord, PositionCloseEvent, RestingOrder } from "@repo/types";
 import { MARKETS, ORDERBOOKS, ORDERS } from "../engine-store";
 import { fetchBalance } from "../helper/fetchBalance";
 import { matchOrder } from "../helper/matchOrder";
@@ -66,14 +66,16 @@ export function createOrder(payload: createOrderPayload, streamMsgId: string, or
 
   const { fills, remainingQty, totalCost, touchedAskPrices, touchedBidPrices } = matchOrder(limitPrice, order, streamMsgId);
 
+  const closedPositions: PositionCloseEvent[] = [];
+
   for (const fill of fills) {
 
     //order record Update;
     order.filledQty += fill.qty;
     order.fills.push(fill);
 
-    //update position of maker
-    updatePosition({
+    //update position of taker
+    const takerClose = updatePosition({
       userId: fill.takerUserId,
       symbol: order.symbol,
       positionSide: order.side === "buy" ? "long" : "short",
@@ -81,7 +83,22 @@ export function createOrder(payload: createOrderPayload, streamMsgId: string, or
       fillPrice: fill.price,
       fillMargin: Math.floor(Number(BigInt(fill.qty) * BigInt(fill.price) / BigInt(order.leverage))),
       leverage: order.leverage,
+      fillCreatedAt: fill.createdAt,
     })
+    if (takerClose) {
+      usdBalance.locked -= takerClose.marginReleased;
+      usdBalance.available += takerClose.marginReleased + takerClose.realizedPnl;
+
+      // the order-level lock above charged this fill's full qty as fresh exposure;
+      // the portion that actually closed/reduced an existing position doesn't need
+      // its own margin — that's already covered by marginReleased above, so undo
+      // the redundant order-level lock for exactly that portion
+      const nettingMargin = Math.floor(Number(BigInt(takerClose.qty) * BigInt(fill.price) / BigInt(order.leverage)));
+      usdBalance.locked -= nettingMargin;
+      usdBalance.available += nettingMargin;
+
+      closedPositions.push({ ...takerClose, closeId: `${fill.fillId}-taker` });
+    }
 
     //makerOrder update and position update
     const makerOrder = ORDERS.get(fill.makerOrderId);
@@ -95,7 +112,7 @@ export function createOrder(payload: createOrderPayload, streamMsgId: string, or
     else makerOrder.status = "open"
 
     //update position of maker
-    updatePosition({
+    const makerClose = updatePosition({
       userId: fill.makerUserId,
       symbol: makerOrder.symbol,
       positionSide: makerOrder.side === "buy" ? "long" : "short",
@@ -103,7 +120,23 @@ export function createOrder(payload: createOrderPayload, streamMsgId: string, or
       fillPrice: fill.price,
       fillMargin: Math.floor(Number(BigInt(fill.qty) * BigInt(fill.price) / BigInt(makerOrder.leverage))),
       leverage: makerOrder.leverage,
+      fillCreatedAt: fill.createdAt,
     })
+    if (makerClose) {
+      const makerBalance = fetchBalance(fill.makerUserId, "USD");
+      if (makerBalance) {
+        makerBalance.locked -= makerClose.marginReleased;
+        makerBalance.available += makerClose.marginReleased + makerClose.realizedPnl;
+
+        // same netting correction as the taker side, applied to the maker's own
+        // order-level lock (maker fills always execute at the maker's own locked-in
+        // price, so no separate price-delta refund is needed here beyond this)
+        const nettingMargin = Math.floor(Number(BigInt(makerClose.qty) * BigInt(fill.price) / BigInt(makerOrder.leverage)));
+        makerBalance.locked -= nettingMargin;
+        makerBalance.available += nettingMargin;
+      }
+      closedPositions.push({ ...makerClose, closeId: `${fill.fillId}-maker` });
+    }
 
   }
 
@@ -161,5 +194,6 @@ export function createOrder(payload: createOrderPayload, streamMsgId: string, or
     fills: order.fills,
     makerOrders: fills.map(f => ORDERS.get(f.makerOrderId)).filter((o): o is OrderRecord => o !== undefined),
     depthDiff,
+    closedPositions: closedPositions.length ? closedPositions : undefined,
   }
 }
