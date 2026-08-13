@@ -1,4 +1,4 @@
-import { CancelOrderResponse, CreateOrderResponse, Settlement, UpdateIndexPriceResponse } from "@repo/types"
+import { CancelOrderResponse, CreateOrderResponse, FundingRateResponse, UpdateIndexPriceResponse } from "@repo/types"
 import { insertFill, prisma } from "@repo/db"
 
 async function persistCreateOrderEvent(data: CreateOrderResponse) {
@@ -88,6 +88,33 @@ async function persistCreateOrderEvent(data: CreateOrderResponse) {
       fill.createdAt
     )
   }
+
+  for (const close of data.closedPositions ?? []) {
+    try {
+      await prisma.closedPosition.upsert({
+        where: { id: close.closeId },
+        create: {
+          id: close.closeId,
+          userId: close.userId,
+          marketId: order.marketId,
+          symbol: close.symbol,
+          positionSide: close.positionSide,
+          closeType: close.closeType,
+          entryPrice: close.entryPrice,
+          exitPrice: close.exitPrice,
+          qty: close.qty,
+          realizedPnl: close.realizedPnl,
+          marginReleased: close.marginReleased,
+          openedAt: new Date(close.openedAt),
+          closedAt: new Date(close.closedAt),
+        },
+        update: {},
+      })
+    } catch (err) {
+      // one bad close shouldn't block the rest of this event's writes from persisting
+      console.error(`Failed to persist closed position ${close.closeId}:`, err)
+    }
+  }
 }
 
 export async function updateDb(type: string, data: unknown) {
@@ -101,29 +128,54 @@ export async function updateDb(type: string, data: unknown) {
   } else if (type === "create_order") {
     await persistCreateOrderEvent(data as CreateOrderResponse);
   } else if (type === "funding_rate") {
-    const { settlements } = data as { settlements: Settlement[] };
-    const seen = new Set<string>()
+    const { rates, settlements } = data as FundingRateResponse;
+
+    for (const rateSnapshot of rates) {
+      try {
+        const market = await prisma.market.findUnique({
+          where: { symbol: rateSnapshot.symbol }
+        })
+        if (!market) continue;
+
+        await prisma.fundingRate.upsert({
+          where: { symbol_settledAt: { symbol: rateSnapshot.symbol, settledAt: new Date(rateSnapshot.settledAt) } },
+          create: {
+            marketId: market.id,
+            symbol: rateSnapshot.symbol,
+            rate: rateSnapshot.rate,
+            settledAt: new Date(rateSnapshot.settledAt)
+          },
+          update: {},
+        })
+      } catch (err) {
+        console.error(`Failed to persist funding rate for ${rateSnapshot.symbol}:`, err)
+      }
+    }
+
     for (const settlement of settlements) {
-      if (seen.has(settlement.symbol)) continue;
-      seen.add(settlement.symbol)
-
-      const market = await prisma.market.findUnique({
-        where: {
-          symbol: settlement.symbol
-        }
-      })
-      if (!market) continue;
-
-      await prisma.fundingRate.upsert({
-        where: { symbol_settledAt: { symbol: settlement.symbol, settledAt: new Date(settlement.settledAt) } },
-        create: {
-          marketId: market.id,
-          symbol: settlement.symbol,
-          rate: settlement.rate,
-          settledAt: new Date(settlement.settledAt)
-        },
-        update: {},
-      })
+      try {
+        await prisma.fundingSettlement.upsert({
+          where: {
+            userId_symbol_settledAt: {
+              userId: settlement.userId,
+              symbol: settlement.symbol,
+              settledAt: new Date(settlement.settledAt)
+            }
+          },
+          create: {
+            userId: settlement.userId,
+            symbol: settlement.symbol,
+            rate: settlement.rate,
+            payment: settlement.payment,
+            marginAfter: settlement.marginAfter,
+            liquidationPriceAfter: settlement.liquidationPriceAfter,
+            settledAt: new Date(settlement.settledAt),
+          },
+          update: {},
+        })
+      } catch (err) {
+        console.error(`Failed to persist funding settlement for user ${settlement.userId}/${settlement.symbol}:`, err)
+      }
     }
   }
   else if (type === "update_index_price") {
