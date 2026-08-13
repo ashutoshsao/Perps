@@ -2,8 +2,8 @@ import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { hero } from "../../data/landingContent";
 import { CornerMarks } from "./CornerMarks";
-import { HeroIllustration } from "./HeroIllustration";
 import { SketchArrow } from "./SketchArrow";
+import { OrderbookPreview } from "./orderbookPreview";
 
 const container = {
   hidden: {},
@@ -69,7 +69,7 @@ export function Hero() {
         </div>
 
         <motion.div variants={item} className="flex items-center justify-center">
-          <HeroIllustration />
+          <OrderbookPreview />
         </motion.div>
       </motion.div>
     </section>
