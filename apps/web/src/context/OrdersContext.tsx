@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { api } from "../api/client";
-import type { Balance, OrderMutationResponse, OrderPayload, UserFill, UserOrder } from "../api/types";
+import type { Balance, ClosedPositionRecord, OrderMutationResponse, OrderPayload, UserFill, UserOrder } from "../api/types";
 import { derivePositions, type DerivedPosition } from "../features/account/positions";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { useLiveAccountLists } from "../hooks/useLiveAccount";
@@ -14,6 +14,7 @@ type OrdersContextValue = {
   orderHistory: UserOrder[];
   fills: UserFill[];
   positions: DerivedPosition[];
+  positionHistory: ClosedPositionRecord[];
   isLive: boolean;
   error: string | null;
   placeOrder: (payload: OrderPayload) => Promise<OrderMutationResponse>;
@@ -37,6 +38,10 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
   );
   const fillsState = useAsyncData(
     () => (token ? api.getFills(token).then((data) => data.fills) : Promise.resolve([])),
+    [token, version],
+  );
+  const positionHistoryState = useAsyncData(
+    () => (token ? api.getPositionHistory(token).then((data) => data.positions) : Promise.resolve([])),
     [token, version],
   );
 
@@ -86,6 +91,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         orderHistory: live.orderHistory,
         fills: live.fills,
         positions,
+        positionHistory: positionHistoryState.data ?? [],
         isLive: live.isLive,
         error: live.error,
         placeOrder,

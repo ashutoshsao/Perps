@@ -11,7 +11,12 @@ import {
   getFundingTone,
   getTickerTone,
 } from "../../lib/markets";
-import { formatUsd } from "../../lib/format";
+import { formatCountdown, formatUsd } from "../../lib/format";
+import { useCountdown } from "../../hooks/useCountdown";
+import { useAsyncData } from "../../hooks/useAsyncData";
+import { api } from "../../api/client";
+
+const FUNDING_INFO_POLL_MS = 60_000;
 
 function Stat({
   label,
@@ -34,6 +39,19 @@ export function MarketStrip() {
   const { market, markets, symbol, setSymbol, ticker, markPrice, indexPrice, fundingRate, marketsError } = useMarket();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  const [fundingTick, setFundingTick] = useState(0);
+  useEffect(() => {
+    setFundingTick(0);
+    if (!symbol) return;
+    const interval = setInterval(() => setFundingTick((t) => t + 1), FUNDING_INFO_POLL_MS);
+    return () => clearInterval(interval);
+  }, [symbol]);
+  const fundingInfo = useAsyncData(
+    () => (symbol ? api.getFundingInfo(symbol) : Promise.resolve(null)),
+    [symbol, fundingTick],
+  );
+  const fundingCountdown = useCountdown(fundingInfo.data?.nextSettlementAt ?? null);
 
   useEffect(() => {
     function handler(e: MouseEvent) {
@@ -90,6 +108,7 @@ export function MarketStrip() {
 
       <Stat label="Index Price" value={formatMarkPrice(indexPrice)} />
       <Stat label="Funding Rate" value={formatFundingRate(fundingRate)} valueClass={fundingClass} />
+      <Stat label="Next Funding" value={formatCountdown(fundingCountdown)} />
       <Stat label="24H Change" value={formatTickerChange(ticker)} valueClass={toneClass} />
       <Stat label="24H High" value={ticker ? formatUsd(ticker.high) : "-"} />
       <Stat label="24H Low" value={ticker ? formatUsd(ticker.low) : "-"} />

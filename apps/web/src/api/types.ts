@@ -183,3 +183,41 @@ export type UserFill = {
 export type AuthResponse = {
   token: string;
 };
+
+export type FundingInfo = {
+  symbol: string;
+  rate: number;
+  samples: number;
+  updatedAt: number | null;
+  lastSettled: { rate: number; settledAt: number } | null;
+  nextSettlementAt: number;
+  intervalHours: number;
+};
+
+export type FundingSettlementRecord = {
+  id: string;
+  userId: string;
+  symbol: string;
+  rate: number;
+  payment: number;
+  marginAfter: number;
+  liquidationPriceAfter: number;
+  settledAt: string;
+};
+
+export type ClosedPositionRecord = {
+  id: string;
+  userId: string;
+  marketId: string;
+  symbol: string;
+  positionSide: "long" | "short";
+  closeType: "reduce" | "close" | "flip";
+  entryPrice: number;
+  exitPrice: number;
+  qty: number;
+  realizedPnl: number;
+  marginReleased: number;
+  openedAt: string;
+  closedAt: string;
+  createdAt: string;
+};

@@ -1,39 +1,75 @@
 import { useEffect, useState } from "react";
 import type { FundingUpdate } from "../api/types";
 import { subscribeChannel } from "../ws/client";
+import { api } from "../api/client";
+import { useAsyncData } from "./useAsyncData";
 
 type FundingRateState = {
   data: FundingUpdate | null;
   error: string | null;
   isLive: boolean;
+  nextSettlementAt: number | null;
 };
 
+const POLL_INTERVAL_MS = 60_000;
+
 export function useFundingRate(symbol: string | null): FundingRateState {
-  const [state, setState] = useState<FundingRateState>({ data: null, error: null, isLive: false });
+  const [live, setLive] = useState<{ data: FundingUpdate | null; error: string | null; isLive: boolean }>({
+    data: null,
+    error: null,
+    isLive: false,
+  });
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     // funding settles infrequently — always reset so a stale rate from the
     // previous market never shows against the newly selected one
-    setState({ data: null, error: null, isLive: false });
+    setLive({ data: null, error: null, isLive: false });
     if (!symbol) return;
 
     const subscription = subscribeChannel<FundingUpdate>(`market:${symbol}:funding`, (data) => {
       if (data.symbol !== symbol) return;
-      setState({ data, error: null, isLive: true });
+      setLive({ data, error: null, isLive: true });
     }, {
       onOpen() {
-        setState((current) => ({ ...current, error: null }));
+        setLive((current) => ({ ...current, error: null }));
       },
       onClose() {
-        setState((current) => ({ ...current, isLive: false }));
+        setLive((current) => ({ ...current, isLive: false }));
       },
       onError(message) {
-        setState((current) => ({ ...current, error: message, isLive: false }));
+        setLive((current) => ({ ...current, error: message, isLive: false }));
       },
     });
 
     return () => subscription.unsubscribe();
   }, [symbol]);
 
-  return state;
+  useEffect(() => {
+    setTick(0);
+    if (!symbol) return;
+    const interval = setInterval(() => setTick((t) => t + 1), POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [symbol]);
+
+  const predicted = useAsyncData(
+    () => (symbol ? api.getFundingInfo(symbol) : Promise.resolve(null)),
+    [symbol, tick],
+  );
+
+  // a settled WS event always wins once it lands; until then, show the predicted rate
+  const fallback: FundingUpdate | null = predicted.data
+    ? {
+        symbol: predicted.data.symbol,
+        rate: predicted.data.rate,
+        settledAt: predicted.data.lastSettled?.settledAt ?? predicted.data.updatedAt ?? 0,
+      }
+    : null;
+
+  return {
+    data: live.data ?? fallback,
+    error: live.error,
+    isLive: live.isLive,
+    nextSettlementAt: predicted.data?.nextSettlementAt ?? null,
+  };
 }

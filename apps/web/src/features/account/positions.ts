@@ -1,5 +1,6 @@
 import type { UserFill } from "../../api/types";
 
+// derived client-side from fills — no `get_positions` engine endpoint yet
 export type DerivedPosition = {
   symbol: string;
   side: "long" | "short";

@@ -7,7 +7,7 @@ import { useAuth } from "../../context/AuthContext";
 import { formatNumber, formatTime, formatUsd, usd } from "../../lib/format";
 import { getMarketSymbol } from "../../lib/markets";
 
-const UNSUPPORTED_TABS = new Set(["Borrows", "TWAP", "Position His"]);
+const UNSUPPORTED_TABS = new Set(["Borrows", "TWAP"]);
 
 export function BottomPanel() {
   const [tab, setTab] = useState("Positions");
@@ -18,7 +18,7 @@ export function BottomPanel() {
 
   const { token } = useAuth();
   const { markets, symbol, markPrice } = useMarket();
-  const { balance, balanceLoading, openOrders, orderHistory, fills, positions, cancelOrder } = useOrders();
+  const { balance, balanceLoading, openOrders, orderHistory, fills, positions, positionHistory, cancelOrder } = useOrders();
 
   const filterBySymbol = <T extends { marketId?: string; symbol?: string }>(rows: T[]) =>
     rows.filter((row) => {
@@ -31,6 +31,7 @@ export function BottomPanel() {
   const filteredHistory = filterBySymbol(orderHistory);
   const filteredFills = filterBySymbol(fills);
   const filteredPositions = filterBySymbol(positions);
+  const filteredPositionHistory = filterBySymbol(positionHistory);
 
   async function handleCancel(orderId: string) {
     setCancelError(null);
@@ -253,6 +254,40 @@ export function BottomPanel() {
                     <span className="text-right text-text-muted">{formatTime(fill.createdAt)}</span>
                   </div>
                 ))}
+              </>
+            )
+          ) : tab === "Position His" ? (
+            filteredPositionHistory.length === 0 ? (
+              <div className="flex flex-1 items-center justify-center text-[13px] text-text-dim">No closed positions</div>
+            ) : (
+              <>
+                <div className="grid grid-cols-7 gap-2 border-b border-border-soft px-4 py-1.5 text-[11px] font-medium text-text-dim">
+                  <span>Market</span>
+                  <span>Side</span>
+                  <span className="text-right">Qty</span>
+                  <span className="text-right">Entry</span>
+                  <span className="text-right">Exit</span>
+                  <span className="text-right">PnL</span>
+                  <span className="text-right">Closed</span>
+                </div>
+                {filteredPositionHistory.map((close) => {
+                  const pnl = usd(close.realizedPnl);
+                  return (
+                    <div key={close.id} className="grid grid-cols-7 items-center gap-2 px-4 py-1.5 text-[12px]">
+                      <span className="text-text">{close.symbol}</span>
+                      <span className={close.positionSide === "long" ? "text-green" : "text-red"}>
+                        {close.positionSide}
+                      </span>
+                      <span className="text-right text-text">{formatNumber(close.qty)}</span>
+                      <span className="text-right text-text">{formatUsd(close.entryPrice)}</span>
+                      <span className="text-right text-text">{formatUsd(close.exitPrice)}</span>
+                      <span className={`text-right ${pnl >= 0 ? "text-green" : "text-red"}`}>
+                        {pnl >= 0 ? "+" : ""}${formatNumber(pnl)}
+                      </span>
+                      <span className="text-right text-text-muted">{formatTime(close.closedAt)}</span>
+                    </div>
+                  );
+                })}
               </>
             )
           ) : (

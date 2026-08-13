@@ -2,8 +2,11 @@ import type {
   AuthResponse,
   Balance,
   Candle,
+  ClosedPositionRecord,
   CreateMarketPayload,
   Depth,
+  FundingInfo,
+  FundingSettlementRecord,
   Market,
   OrderMutationResponse,
   OrderPayload,
@@ -97,5 +100,23 @@ export const api = {
   },
   cancelOrder(token: string, orderId: string) {
     return request<OrderMutationResponse>(`/order/${encodeURIComponent(orderId)}`, { method: "DELETE", token });
+  },
+  getFundingInfo(symbol: string) {
+    return request<FundingInfo>(`/funding/${encodeURIComponent(symbol)}`);
+  },
+  getFundingHistory(token: string, params?: { limit?: number; cursor?: string }) {
+    const qs = new URLSearchParams();
+    if (params?.limit) qs.set("limit", String(params.limit));
+    if (params?.cursor) qs.set("cursor", params.cursor);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<{ settlements: FundingSettlementRecord[]; nextCursor: string | null }>(`/funding/history${suffix}`, { token });
+  },
+  getPositionHistory(token: string, params?: { symbol?: string; limit?: number; cursor?: string }) {
+    const qs = new URLSearchParams();
+    if (params?.symbol) qs.set("symbol", params.symbol);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    if (params?.cursor) qs.set("cursor", params.cursor);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<{ positions: ClosedPositionRecord[]; nextCursor: string | null }>(`/positions/history${suffix}`, { token });
   },
 };
