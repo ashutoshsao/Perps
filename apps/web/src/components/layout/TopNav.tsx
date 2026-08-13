@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { NebulaLogo, ChevronDownIcon, MoonIcon, SearchIcon, SunIcon } from "../../icons";
 import { navLinks } from "../../data/mockMarket";
 import { useAuth } from "../../context/AuthContext";
@@ -39,10 +40,10 @@ export function TopNav() {
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-border-soft bg-panel px-6">
       <div className="flex items-center gap-8">
-        <div className="flex items-center gap-2">
+        <Link to="/" className="flex items-center gap-2">
           <NebulaLogo size={26} />
           <span className="text-[17px] font-bold text-text">Nebula</span>
-        </div>
+        </Link>
 
         <nav className="flex items-center gap-7">
           {navLinks.map((link) =>

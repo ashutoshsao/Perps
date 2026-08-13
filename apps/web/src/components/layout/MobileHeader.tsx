@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { CloseIcon, MenuIcon, MoonIcon, NebulaLogo, SearchIcon, SunIcon } from "../../icons";
 import { navLinks } from "../../data/mockMarket";
 import { useAuth } from "../../context/AuthContext";
@@ -25,8 +26,10 @@ export function MobileHeader() {
         <button type="button" onClick={() => setDrawerOpen(true)} className="text-text-muted hover:text-text" aria-label="Open menu">
           <MenuIcon size={20} />
         </button>
-        <NebulaLogo size={24} />
-        <span className="text-[16px] font-bold text-text">Nebula</span>
+        <Link to="/" className="flex items-center gap-2">
+          <NebulaLogo size={24} />
+          <span className="text-[16px] font-bold text-text">Nebula</span>
+        </Link>
       </div>
 
       <div className="flex items-center gap-3">

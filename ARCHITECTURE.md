@@ -24,6 +24,7 @@ Money is integer cents everywhere outside the browser: order prices, index/mark 
 ## Frontend Stack
 
 - React + TypeScript on Vite.
+- `react-router-dom` for routing: `/` (marketing landing), `/about` (plain-language explainer), `/trade` (the trading terminal, `TradeApp.tsx`) — see `apps/web/src/App.tsx`.
 - Tailwind CSS v4 for layout and design tokens.
 - REST server state goes through a plain `useAsyncData` hook, not TanStack Query.
 - Auth, selected market, orders/positions, and UI state live in React Context providers (`AuthContext`, `MarketContext`, `OrdersContext`, etc.), not Zustand.
@@ -32,11 +33,11 @@ Money is integer cents everywhere outside the browser: order prices, index/mark 
 
 ## Product Direction
 
-The frontend is a full centralized perpetual futures exchange, not a simple trading terminal. The experience should feel institutional, precise, and fast.
+The frontend is a full centralized perpetual futures exchange, not a simple trading terminal. The trading experience (`/trade`) should feel institutional, precise, and fast. The marketing pages (`/`, `/about`) are a deliberately different register — airy, hero-led — reusing the same dark palette and mono/tabular type language so the handoff into `/trade` doesn't feel like a different product.
 
-Design principles:
+Design principles for `/trade`:
 
-- Dense, calm market UI with no landing-page hero treatment.
+- Dense, calm market UI, no hero treatment.
 - Dark graphite base, quiet panel structure, sharp grid discipline.
 - Green and red are reserved for buy/sell and positive/negative market meaning.
 - Typography prioritizes scan speed: tabular numbers, compact labels, clear hierarchy.
