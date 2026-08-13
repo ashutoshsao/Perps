@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
-import type { EngineCommandType, EngineRequest } from "@repo/types";
+import type { EngineCommandType, EngineRequest, PositionClose } from "@repo/types";
 import { handleCommand } from "../engine/src/controller/engine.controller";
-import { BALANCES, FILLS, FUNDING_RATE_ACCOUMILATOR, INDEX_PRICES, LAST_FUNDING, MARK_PRICE_EWMA, MARKET_UPDATE_IDS, MARKETS, ORDERBOOKS, ORDERS, POSITIONS } from "../engine/src/engine-store";
+import { updatePosition } from "../engine/src/helper/updatePosition";
+import { BALANCES, FUNDING_RATE_ACCOUMILATOR, INDEX_PRICES, LAST_FUNDING, MARK_PRICE_EWMA, MARKET_UPDATE_IDS, MARKETS, ORDERBOOKS, ORDERS, POSITIONS } from "../engine/src/engine-store";
 import { getMarketSymbolsForFeedSymbol, newMarket, resetPriceFeederState, subscribedMarkets } from "../price-feeder/src/helper/newMarket";
 
 const WORKSPACE_ROOT = `${import.meta.dir}/../..`;
@@ -37,7 +38,6 @@ function engineCommand(type: EngineCommandType, payload: unknown = {}) {
 
 function resetEngineStore() {
   BALANCES.clear();
-  FILLS.clear();
   INDEX_PRICES.clear();
   MARKET_UPDATE_IDS.clear();
   MARKETS.clear();
@@ -972,7 +972,13 @@ describe("engine commands", () => {
     });
 
     // no orderbook for this symbol — mark price falls back to the index price
-    expect(response).toEqual({ symbol: "INDEX-USD", markPrice: 123, events: [] });
+    expect(response).toEqual({
+      symbol: "INDEX-USD",
+      markPrice: 123,
+      events: [],
+      predictedFundingRate: 0,
+      fundingSamples: 0,
+    });
     expect(INDEX_PRICES.get("INDEX-USD")).toBe(123);
     expect(() =>
       handleCommand({
@@ -1211,6 +1217,338 @@ describe("engine commands", () => {
     }
     expect(MARK_PRICE_EWMA.has("UNTRADED-USD")).toBe(false);
     expect(FUNDING_RATE_ACCOUMILATOR.has("UNTRADED-USD")).toBe(false);
+  });
+});
+
+describe("balance settlement on position close", () => {
+  it("frees all locked margin (taker side) when a taker order fully closes its own position", () => {
+    engineCommand("create_market", {
+      marketId: "settle-taker-market",
+      symbol: "SETTLE-TAKER-USD",
+      maxLeverage: 20,
+      minQty: 1,
+    });
+    engineCommand("add_balance", { userId: "settle-taker", amount: 1_000_000 });
+    engineCommand("add_balance", { userId: "settle-taker-mm", amount: 1_000_000 });
+
+    // resting liquidity on both sides so the taker can open then close
+    engineCommand("create_order", {
+      userId: "settle-taker-mm", symbol: "SETTLE-TAKER-USD",
+      orderType: "limit", side: "sell", price: 100, qty: 10, leverage: 1,
+    });
+    engineCommand("create_order", {
+      userId: "settle-taker-mm", symbol: "SETTLE-TAKER-USD",
+      orderType: "limit", side: "buy", price: 90, qty: 10, leverage: 1,
+    });
+
+    const before = engineCommand("get_balance", { userId: "settle-taker" });
+    const totalBefore = before.available + before.locked;
+
+    engineCommand("create_order", {
+      userId: "settle-taker", symbol: "SETTLE-TAKER-USD",
+      orderType: "market", side: "buy", qty: 5, leverage: 10, slippageBps: 10_000,
+    });
+    const afterOpen = engineCommand("get_balance", { userId: "settle-taker" });
+    expect(afterOpen.locked).toBeGreaterThan(0);
+
+    engineCommand("create_order", {
+      userId: "settle-taker", symbol: "SETTLE-TAKER-USD",
+      orderType: "market", side: "sell", qty: 5, leverage: 10, slippageBps: 10_000,
+    });
+    const afterClose = engineCommand("get_balance", { userId: "settle-taker" });
+
+    // fully flat — no position left, so nothing should still be locked
+    expect(afterClose.locked).toBe(0);
+    // price dropped 100 -> 90 on a long: realized PnL is exactly -(100-90)*5 = -50
+    expect(afterClose.available + afterClose.locked).toBe(totalBefore - 50);
+  });
+
+  it("frees all locked margin (maker side) when a resting maker order fully closes its own position", () => {
+    engineCommand("create_market", {
+      marketId: "settle-maker-market",
+      symbol: "SETTLE-MAKER-USD",
+      maxLeverage: 20,
+      minQty: 1,
+    });
+    engineCommand("add_balance", { userId: "settle-maker", amount: 1_000_000 });
+    engineCommand("add_balance", { userId: "settle-maker-counterparty", amount: 1_000_000 });
+
+    // settle-maker opens a long as a taker first
+    engineCommand("create_order", {
+      userId: "settle-maker-counterparty", symbol: "SETTLE-MAKER-USD",
+      orderType: "limit", side: "sell", price: 100, qty: 5, leverage: 1,
+    });
+    engineCommand("create_order", {
+      userId: "settle-maker", symbol: "SETTLE-MAKER-USD",
+      orderType: "market", side: "buy", qty: 5, leverage: 10, slippageBps: 10_000,
+    });
+
+    const totalBeforeClose = (() => {
+      const b = engineCommand("get_balance", { userId: "settle-maker" });
+      return b.available + b.locked;
+    })();
+
+    // settle-maker now rests a sell to close, as the MAKER this time
+    engineCommand("create_order", {
+      userId: "settle-maker", symbol: "SETTLE-MAKER-USD",
+      orderType: "limit", side: "sell", price: 110, qty: 5, leverage: 10,
+    });
+    // counterparty takes it, filling settle-maker's resting close order
+    engineCommand("create_order", {
+      userId: "settle-maker-counterparty", symbol: "SETTLE-MAKER-USD",
+      orderType: "market", side: "buy", qty: 5, leverage: 1, slippageBps: 10_000,
+    });
+
+    const afterClose = engineCommand("get_balance", { userId: "settle-maker" });
+
+    expect(afterClose.locked).toBe(0);
+    // price rose 100 -> 110 on a long: realized PnL is exactly (110-100)*5 = 50
+    expect(afterClose.available + afterClose.locked).toBe(totalBeforeClose + 50);
+  });
+
+  it("only releases the netted portion on a partial reduce, leaving the rest correctly locked", () => {
+    engineCommand("create_market", {
+      marketId: "settle-reduce-market",
+      symbol: "SETTLE-REDUCE-USD",
+      maxLeverage: 20,
+      minQty: 1,
+    });
+    engineCommand("add_balance", { userId: "settle-reducer", amount: 1_000_000 });
+    engineCommand("add_balance", { userId: "settle-reducer-mm", amount: 1_000_000 });
+
+    // bid strictly below the ask so the two resting mm quotes don't cross each other
+    engineCommand("create_order", {
+      userId: "settle-reducer-mm", symbol: "SETTLE-REDUCE-USD",
+      orderType: "limit", side: "sell", price: 100, qty: 10, leverage: 1,
+    });
+    engineCommand("create_order", {
+      userId: "settle-reducer-mm", symbol: "SETTLE-REDUCE-USD",
+      orderType: "limit", side: "buy", price: 99, qty: 10, leverage: 1,
+    });
+
+    const totalBefore = (() => {
+      const b = engineCommand("get_balance", { userId: "settle-reducer" });
+      return b.available + b.locked;
+    })();
+
+    engineCommand("create_order", {
+      userId: "settle-reducer", symbol: "SETTLE-REDUCE-USD",
+      orderType: "market", side: "buy", qty: 10, leverage: 10, slippageBps: 10_000,
+    });
+    // get_balance returns a live reference, so pull out the primitive before more trades mutate it
+    const lockedAfterOpen = engineCommand("get_balance", { userId: "settle-reducer" }).locked as number;
+
+    const reduceOrder = engineCommand("create_order", {
+      userId: "settle-reducer", symbol: "SETTLE-REDUCE-USD",
+      orderType: "market", side: "sell", qty: 4, leverage: 10, slippageBps: 10_000,
+    });
+    const afterReduce = engineCommand("get_balance", { userId: "settle-reducer" });
+    const lockedAfterReduce = afterReduce.locked as number;
+    const totalAfterReduce = (afterReduce.available as number) + lockedAfterReduce;
+    const reducePnl = reduceOrder.closedPositions[0].realizedPnl as number;
+
+    // locked should shrink by exactly 4/10 of what was locked at open, not stay inflated
+    expect(lockedAfterReduce).toBe(Math.floor(lockedAfterOpen * 6 / 10));
+    expect(totalAfterReduce).toBe(totalBefore + reducePnl);
+
+    const closeOrder = engineCommand("create_order", {
+      userId: "settle-reducer", symbol: "SETTLE-REDUCE-USD",
+      orderType: "market", side: "sell", qty: 6, leverage: 10, slippageBps: 10_000,
+    });
+    const afterFullClose = engineCommand("get_balance", { userId: "settle-reducer" });
+    const closePnl = closeOrder.closedPositions[0].realizedPnl as number;
+
+    expect(afterFullClose.locked).toBe(0);
+    expect(afterFullClose.available + afterFullClose.locked).toBe(totalBefore + reducePnl + closePnl);
+  });
+});
+
+describe("updatePosition", () => {
+  it("computes positive realized PnL for a long reduce when price rose", () => {
+    const userId = "long-reduce";
+    const symbol = "BTC-PERP";
+
+    updatePosition({
+      userId, symbol, positionSide: "long",
+      fillQty: 10, fillPrice: 100, fillMargin: 100, leverage: 10,
+      fillCreatedAt: 1000,
+    });
+
+    const close = updatePosition({
+      userId, symbol, positionSide: "short",
+      fillQty: 4, fillPrice: 120, fillMargin: 48, leverage: 10,
+      fillCreatedAt: 2000,
+    });
+
+    expect(close).not.toBeNull();
+    expect(close!.closeType).toBe("reduce");
+    expect(close!.positionSide).toBe("long");
+    expect(close!.realizedPnl).toBe(80); // (120 - 100) * 4
+    expect(close!.marginReleased).toBe(40); // floor(100 * 4 / 10)
+    expect(close!.openedAt).toBe(1000);
+    expect(close!.closedAt).toBe(2000);
+
+    const remaining = POSITIONS.get(userId)!.get(symbol)!;
+    expect(remaining.qty).toBe(6);
+    expect(remaining.margin).toBe(60);
+  });
+
+  it("computes positive realized PnL for a short reduce when price dropped", () => {
+    const userId = "short-reduce";
+    const symbol = "BTC-PERP";
+
+    updatePosition({
+      userId, symbol, positionSide: "short",
+      fillQty: 10, fillPrice: 100, fillMargin: 100, leverage: 10,
+      fillCreatedAt: 1000,
+    });
+
+    const close = updatePosition({
+      userId, symbol, positionSide: "long",
+      fillQty: 4, fillPrice: 80, fillMargin: 32, leverage: 10,
+      fillCreatedAt: 2000,
+    });
+
+    expect(close!.positionSide).toBe("short");
+    expect(close!.realizedPnl).toBe(80); // -(80 - 100) * 4
+  });
+
+  it("closes exactly and removes the position", () => {
+    const userId = "exact-close";
+    const symbol = "BTC-PERP";
+
+    updatePosition({
+      userId, symbol, positionSide: "long",
+      fillQty: 5, fillPrice: 100, fillMargin: 50, leverage: 10,
+      fillCreatedAt: 1000,
+    });
+
+    const close = updatePosition({
+      userId, symbol, positionSide: "short",
+      fillQty: 5, fillPrice: 110, fillMargin: 55, leverage: 10,
+      fillCreatedAt: 3000,
+    });
+
+    expect(close!.closeType).toBe("close");
+    expect(close!.realizedPnl).toBe(50);
+    expect(close!.marginReleased).toBe(50);
+    expect(POSITIONS.get(userId)!.get(symbol)).toBeUndefined();
+  });
+
+  it("flips: closes the old side at its old qty and opens a fresh position on the new side", () => {
+    const userId = "flip";
+    const symbol = "BTC-PERP";
+
+    updatePosition({
+      userId, symbol, positionSide: "short",
+      fillQty: 10, fillPrice: 100, fillMargin: 100, leverage: 10,
+      fillCreatedAt: 1000,
+    });
+
+    const close = updatePosition({
+      userId, symbol, positionSide: "long",
+      fillQty: 15, fillPrice: 90, fillMargin: 135, leverage: 10,
+      fillCreatedAt: 4000,
+    });
+
+    expect(close!.closeType).toBe("flip");
+    expect(close!.positionSide).toBe("short");
+    expect(close!.qty).toBe(10); // old qty, not the 15 that filled
+    expect(close!.realizedPnl).toBe(100); // -(90 - 100) * 10
+    expect(close!.marginReleased).toBe(100);
+    expect(close!.openedAt).toBe(1000);
+
+    const flipped = POSITIONS.get(userId)!.get(symbol)!;
+    expect(flipped.positionSide).toBe("long");
+    expect(flipped.qty).toBe(5); // remaining 15 - 10
+    expect(flipped.margin).toBe(135);
+    expect(flipped.openedAt).toBe(4000);
+  });
+
+  it("preserves openedAt across same-side increases", () => {
+    const userId = "increase";
+    const symbol = "BTC-PERP";
+
+    updatePosition({
+      userId, symbol, positionSide: "long",
+      fillQty: 5, fillPrice: 100, fillMargin: 50, leverage: 10,
+      fillCreatedAt: 1000,
+    });
+
+    const result = updatePosition({
+      userId, symbol, positionSide: "long",
+      fillQty: 5, fillPrice: 110, fillMargin: 55, leverage: 10,
+      fillCreatedAt: 5000,
+    });
+
+    expect(result).toBeNull();
+    expect(POSITIONS.get(userId)!.get(symbol)!.openedAt).toBe(1000);
+  });
+
+  it("keeps margin an integer after a non-evenly-divisible partial reduce", () => {
+    const userId = "float-leak";
+    const symbol = "BTC-PERP";
+
+    updatePosition({
+      userId, symbol, positionSide: "long",
+      fillQty: 3, fillPrice: 100, fillMargin: 100, leverage: 3,
+      fillCreatedAt: 1000,
+    });
+
+    const close = updatePosition({
+      userId, symbol, positionSide: "short",
+      fillQty: 1, fillPrice: 100, fillMargin: 34, leverage: 3,
+      fillCreatedAt: 2000,
+    });
+
+    expect(Number.isInteger(close!.marginReleased)).toBe(true);
+    expect(close!.marginReleased).toBe(33); // floor(100 * 1 / 3)
+    expect(Number.isInteger(POSITIONS.get(userId)!.get(symbol)!.margin)).toBe(true);
+  });
+
+  it("balance conservation: open -> partial reduce -> full close changes available+locked by exactly the realized PnL", () => {
+    const userId = "conservation";
+    const symbol = "BTC-PERP";
+
+    // mimics createOrder.ts's order-placement margin lock — separate from updatePosition itself
+    const balance = { available: 1000, locked: 0 };
+    const openMargin = 100;
+    balance.available -= openMargin;
+    balance.locked += openMargin;
+
+    updatePosition({
+      userId, symbol, positionSide: "long",
+      fillQty: 10, fillPrice: 100, fillMargin: openMargin, leverage: 10,
+      fillCreatedAt: 1000,
+    });
+
+    function settle(close: PositionClose | null) {
+      if (!close) return;
+      balance.locked -= close.marginReleased;
+      balance.available += close.marginReleased + close.realizedPnl;
+    }
+
+    const totalBefore = balance.available + balance.locked;
+
+    const reduceClose = updatePosition({
+      userId, symbol, positionSide: "short",
+      fillQty: 4, fillPrice: 120, fillMargin: 48, leverage: 10,
+      fillCreatedAt: 2000,
+    });
+    settle(reduceClose);
+
+    const closeClose = updatePosition({
+      userId, symbol, positionSide: "short",
+      fillQty: 6, fillPrice: 90, fillMargin: 54, leverage: 10,
+      fillCreatedAt: 3000,
+    });
+    settle(closeClose);
+
+    const expectedPnl = (reduceClose?.realizedPnl ?? 0) + (closeClose?.realizedPnl ?? 0);
+    const totalAfter = balance.available + balance.locked;
+
+    expect(totalAfter - totalBefore).toBe(expectedPnl);
+    expect(balance.locked).toBe(0);
   });
 });
 
