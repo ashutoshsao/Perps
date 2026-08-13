@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { hero } from "../../data/landingContent";
 import { CornerMarks } from "./CornerMarks";
 import { HeroIllustration } from "./HeroIllustration";
+import { SketchArrow } from "./SketchArrow";
 
 const container = {
   hidden: {},
@@ -50,7 +51,8 @@ export function Hero() {
             {hero.subhead}
           </motion.p>
 
-          <motion.div variants={item} className="mt-10 flex items-center gap-4">
+          <motion.div variants={item} className="relative mt-16 flex items-center gap-4">
+            <SketchArrow className="absolute -top-14 left-20" />
             <Link
               to={hero.primaryCta.to}
               className="rounded-full bg-text px-6 py-3 text-[14px] font-semibold text-bg hover:bg-text/90"
