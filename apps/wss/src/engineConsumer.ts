@@ -1,5 +1,5 @@
 import { getRedisClient } from "@repo/redis";
-import { CancelOrderResponse, CreateOrderResponse, REDIS_KEYS, RedisResponseType, Settlement, UpdateIndexPriceResponse } from "@repo/types";
+import { CancelOrderResponse, CreateOrderResponse, FundingRateResponse, REDIS_KEYS, RedisResponseType, UpdateIndexPriceResponse } from "@repo/types";
 
 const WSS_EVENTS = new Set(["create_order", "cancel_order", "funding_rate", "update_index_price"]);
 const GROUP = "wss"
@@ -76,13 +76,9 @@ export async function readEngineEmits() {
           await publishClient.publish(`user:${data.order.userId}:orders`, JSON.stringify(data.order))
         }
         else if (type === "funding_rate") {
-          const { settlements } = JSON.parse(msg.message.data) as { settlements: Settlement[] };
-          const dedupMap = new Map<string, { rate: number, settledAt: number }>();
-          for (const settlement of settlements) {
-            dedupMap.set(settlement.symbol, { rate: settlement.rate, settledAt: settlement.settledAt });
-          }
+          const { rates, settlements } = JSON.parse(msg.message.data) as FundingRateResponse;
 
-          for (const [symbol, { rate, settledAt }] of dedupMap) {
+          for (const { symbol, rate, settledAt } of rates) {
             await publishClient.publish(`market:${symbol}:funding`, JSON.stringify({ symbol, rate, settledAt }))
           }
 
