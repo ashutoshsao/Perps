@@ -1,5 +1,5 @@
 import { getRedisClient } from "@repo/redis";
-import { CancelOrderResponse, CreateOrderResponse, EngineRequest, OrderRecord, REDIS_KEYS, RedisResponseType, UpdateIndexPriceResponse } from "@repo/types";
+import { CancelOrderResponse, CreateOrderResponse, EngineRequest, nextFundingTime, OrderRecord, REDIS_KEYS, RedisResponseType, UpdateIndexPriceResponse } from "@repo/types";
 import { handleCommand } from "./src/controller/engine.controller";
 import { loadSnapshot, saveSnapshot } from "./src/helper/snapshot";
 import { ORDERS } from "./src/engine-store";
@@ -25,9 +25,6 @@ let lastSnapshotTime = Date.now()
 
 //snapshot every 5 mins
 const SNAPSHOT_INTERVAL = 5 * 60 * 1000
-
-//universal funding_rate times
-const FUNDING_TIMES_UTC_HOURS = [0, 8, 16];
 
 async function startUp() {
   //loadSnapshot
@@ -63,7 +60,7 @@ async function startUp() {
           if (!response) continue;
 
           if (type === "update_index_price") {
-            const { symbol, markPrice, events } = response as UpdateIndexPriceResponse;
+            const { symbol, markPrice, events, predictedFundingRate, fundingSamples } = response as UpdateIndexPriceResponse;
 
             // mark price is ephemeral — fire-and-forget pub/sub, never the durable event log
             const time = parseInt(`${msg.id.split("-")[0]}`);
@@ -72,6 +69,14 @@ async function startUp() {
               price: markPrice,
               time
             }))
+
+            // not awaited: runs every price tick, can't afford a redis round trip here
+            writeRedis.set(REDIS_KEYS.predictedFunding(symbol), JSON.stringify({
+              symbol,
+              rate: predictedFundingRate,
+              samples: fundingSamples,
+              updatedAt: time,
+            }), { EX: 300 }).catch((err) => console.log(`predicted funding write failed for ${symbol}: ${(err as Error).message}`))
 
             // the durable stream only sees ticks that carry liquidation/ADL events
             if (events.length > 0) {
@@ -141,22 +146,6 @@ async function startUp() {
   }
 }
 
-function msUntilNextFunding(): number {
-  const now = new Date()
-  const currentHour = now.getUTCHours()
-
-  const nextHour = FUNDING_TIMES_UTC_HOURS.find(h => h > currentHour) ?? FUNDING_TIMES_UTC_HOURS[0];
-  const next = new Date(Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate(),
-    nextHour, 0, 0, 0
-  ))
-
-  if (nextHour <= currentHour) next.setUTCDate(next.getUTCDate() + 1)
-  return next.getTime() - now.getTime()
-}
-
 function scheduleFundingRate(writeRedis: RedisClient) {
   setTimeout(async function trigger() {
     await writeRedis.xAdd(REDIS_KEYS.engineCommands, '*', {
@@ -166,7 +155,7 @@ function scheduleFundingRate(writeRedis: RedisClient) {
       payload: JSON.stringify({})
     })
     scheduleFundingRate(writeRedis);
-  }, msUntilNextFunding())
+  }, nextFundingTime() - Date.now())
 }
 
 startUp().catch((err) => {

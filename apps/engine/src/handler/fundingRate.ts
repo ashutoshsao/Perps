@@ -1,17 +1,19 @@
-import { Settlement } from "@repo/types";
+import { FundingRateResponse, FundingRateSnapshot, Settlement } from "@repo/types";
 import { FUNDING_RATE_ACCOUMILATOR, INDEX_PRICES, LAST_FUNDING, ORDERBOOKS, POSITIONS } from "../engine-store";
+import { currentFundingRate } from "../helper/predictedFunding";
 
-export function fundingRate(streamMsgId: string) {
+export function fundingRate(streamMsgId: string): FundingRateResponse {
 
+  let rates: FundingRateSnapshot[] = [];
   let settlements: Settlement[] = [];
+  const settledAt = parseInt(`${streamMsgId.split('-')[0]}`);
 
-  for (const [symbol, orderbook] of ORDERBOOKS) {
+  for (const [symbol] of ORDERBOOKS) {
     const indexPrice = INDEX_PRICES.get(symbol);
     if (!indexPrice) continue;
 
-    const acc = FUNDING_RATE_ACCOUMILATOR.get(symbol)
-    let rate = acc && acc.samples > 0 ? acc.sumPremium / acc.samples : (LAST_FUNDING.get(symbol) ?? 0);
-    rate = Math.max(-0.0075, Math.min(0.0075, rate));
+    const { rate } = currentFundingRate(symbol);
+    rates.push({ symbol, rate, settledAt });
 
     for (const [userId, userPositions] of POSITIONS) {
       const position = userPositions.get(symbol);
@@ -31,12 +33,12 @@ export function fundingRate(streamMsgId: string) {
         : position.averagePrice + Math.floor(position.margin / position.qty)
 
       settlements.push({
-        symbol, userId, rate, payment, marginAfter: position.margin, liquidationPriceAfter: position.liquidationPrice, settledAt: parseInt(`${streamMsgId.split('-')[0]}`)
+        symbol, userId, rate, payment, marginAfter: position.margin, liquidationPriceAfter: position.liquidationPrice, settledAt
       })
 
     }
     FUNDING_RATE_ACCOUMILATOR.set(symbol, { sumPremium: 0, samples: 0 })
     LAST_FUNDING.set(symbol, rate)
   }
-  return { settlements };
+  return { rates, settlements };
 }

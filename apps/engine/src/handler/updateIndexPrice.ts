@@ -1,6 +1,7 @@
 import { UpdateIndexPriceResponse, updateIndexPricePayload } from "@repo/types";
 import { FUNDING_RATE_ACCOUMILATOR, INDEX_PRICES, MARK_PRICE_EWMA, ORDERBOOKS } from "../engine-store";
 import { liquidationCheck } from "../helper/liquidationCheck";
+import { currentFundingRate } from "../helper/predictedFunding";
 
 export function updateIndexPrice(payload: updateIndexPricePayload, streamMsgId: string): UpdateIndexPriceResponse {
   const { symbol, price } = payload;
@@ -20,9 +21,12 @@ export function updateIndexPrice(payload: updateIndexPricePayload, streamMsgId: 
     FUNDING_RATE_ACCOUMILATOR.set(symbol, acc)
   }
   const events = liquidationCheck(symbol, price, streamMsgId);
+  const { rate, samples } = currentFundingRate(symbol);
   return {
     symbol,
     markPrice: Math.round(MARK_PRICE_EWMA.get(symbol) ?? price),
-    events
+    events,
+    predictedFundingRate: rate,
+    fundingSamples: samples,
   }
 }
