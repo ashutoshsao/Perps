@@ -46,7 +46,7 @@ export function BottomPanel() {
   }
 
   return (
-    <div className="flex h-[236px] shrink-0 flex-col border-t border-border-soft bg-panel">
+    <div className="flex h-[160px] shrink-0 flex-col border-t border-border-soft bg-panel">
       <div className="flex h-11 shrink-0 items-center justify-between border-b border-border-soft px-4">
         <div className="flex items-center gap-1">
           {bottomTabs.map((t) => {

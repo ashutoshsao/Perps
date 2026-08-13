@@ -94,12 +94,15 @@ function applyVisibleRange(chart: IChartApi | null, candles: Candle[], range: st
   if (!chart || candles.length === 0) return;
 
   const seconds = RANGE_SECONDS[range];
+  const lastTime = toTime(candles[candles.length - 1]!.bucket);
   if (seconds == null) {
     chart.timeScale().fitContent();
-  } else {
-    const lastTime = toTime(candles[candles.length - 1]!.bucket);
-    chart.timeScale().setVisibleRange({ from: (lastTime - seconds) as UTCTimestamp, to: lastTime });
+    return;
   }
+  // clamp to earliest candle we have, otherwise a long range on a young market looks empty
+  const firstTime = toTime(candles[0]!.bucket);
+  const from = Math.max(lastTime - seconds, firstTime);
+  chart.timeScale().setVisibleRange({ from: from as UTCTimestamp, to: lastTime });
 }
 
 export function PriceChart({

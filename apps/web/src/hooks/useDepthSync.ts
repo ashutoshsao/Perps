@@ -50,10 +50,16 @@ export function useDepthSync(symbol: string | null): DepthSyncState {
   const bufferRef = useRef<DepthDiff[]>([]);
   const snapshotReadyRef = useRef(false);
   const socketReadyRef = useRef(false);
+  // coalesce diffs to one state update per animation frame to avoid a re-render per tick
+  const pendingRef = useRef<DepthDiff[]>([]);
+  const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!symbol) {
       bufferRef.current = [];
+      pendingRef.current = [];
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
       snapshotReadyRef.current = false;
       socketReadyRef.current = false;
       setState({ depth: null, status: "idle", error: null });
@@ -64,9 +70,27 @@ export function useDepthSync(symbol: string | null): DepthSyncState {
     const activeSymbol = symbol;
     const channel = `market:${activeSymbol}:depth`;
     bufferRef.current = [];
+    pendingRef.current = [];
     snapshotReadyRef.current = false;
     socketReadyRef.current = false;
     setState({ depth: null, status: "connecting", error: null });
+
+    function flushPending() {
+      rafRef.current = null;
+      const diffs = pendingRef.current;
+      pendingRef.current = [];
+      if (diffs.length === 0) return;
+
+      setState((current) => {
+        if (!current.depth) return current;
+        const nextDepth = diffs.reduce((depth, diff) => {
+          if (diff.finalUpdateId <= depth.lastUpdateId) return depth;
+          return applyDiff(depth, diff);
+        }, current.depth);
+        if (nextDepth === current.depth) return current;
+        return { depth: nextDepth, status: "live", error: null };
+      });
+    }
 
     const subscription = subscribeChannel<DepthDiff>(channel, (diff) => {
       if (diff.symbol !== activeSymbol) return;
@@ -75,11 +99,10 @@ export function useDepthSync(symbol: string | null): DepthSyncState {
         return;
       }
 
-      setState((current) => {
-        if (!current.depth || diff.finalUpdateId <= current.depth.lastUpdateId) return current;
-        const nextDepth = applyDiff(current.depth, diff);
-        return { depth: nextDepth, status: "live", error: null };
-      });
+      pendingRef.current.push(diff);
+      if (rafRef.current == null) {
+        rafRef.current = requestAnimationFrame(flushPending);
+      }
     }, {
       onOpen() {
         socketReadyRef.current = true;
@@ -126,6 +149,8 @@ export function useDepthSync(symbol: string | null): DepthSyncState {
     return () => {
       cancelled = true;
       subscription.unsubscribe();
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
     };
   }, [symbol]);
 

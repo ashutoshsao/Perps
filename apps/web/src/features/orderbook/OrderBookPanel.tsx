@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { TextTabs } from "../../components/ui/Tabs";
 import { DepthBuyIcon, DepthFullIcon, DepthSplitIcon, LockIcon, MinusIcon, PlusIcon } from "../../icons";
@@ -105,7 +105,55 @@ export function OrderBookPanel({
   const [locked, setLocked] = useState(false);
   const { setPrice } = useTicket();
   const { depth, depthStatus, depthError, trades, tradesLoading, tradesError } = useTrading();
-  const { markPrice } = useMarket();
+  const { symbol, markPrice } = useMarket();
+
+  const midRowRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const centeredRef = useRef(false);
+  // track the mid row's viewport position ourselves and correct scrollTop to hold it,
+  // since native overflow-anchor doesn't anchor to a specific row
+  const anchorTopRef = useRef<number | null>(null);
+  // detect user scroll intent from input events directly — scrollTop write events are
+  // racy and can get misread as user scrolls during a correction burst
+  const userInteractingRef = useRef(false);
+  const interactionTimeoutRef = useRef<number | null>(null);
+
+  // re-center once per symbol on first real depth, never on a routine tick
+  useEffect(() => {
+    centeredRef.current = false;
+    anchorTopRef.current = null;
+  }, [symbol]);
+
+  useEffect(() => {
+    if (!depth || centeredRef.current) return;
+    centeredRef.current = true;
+    const id = requestAnimationFrame(() => {
+      midRowRef.current?.scrollIntoView({ block: "center" });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [depth]);
+
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    function onUserInput() {
+      userInteractingRef.current = true;
+      if (interactionTimeoutRef.current != null) window.clearTimeout(interactionTimeoutRef.current);
+      interactionTimeoutRef.current = window.setTimeout(() => {
+        userInteractingRef.current = false;
+        anchorTopRef.current = midRowRef.current?.getBoundingClientRect().top ?? null;
+      }, 150);
+    }
+    el.addEventListener("wheel", onUserInput, { passive: true });
+    el.addEventListener("touchmove", onUserInput, { passive: true });
+    return () => {
+      el.removeEventListener("wheel", onUserInput);
+      el.removeEventListener("touchmove", onUserInput);
+      if (interactionTimeoutRef.current != null) window.clearTimeout(interactionTimeoutRef.current);
+    };
+  }, []);
+
+  const correctionTimeoutRef = useRef<number | null>(null);
 
   const step = GROUPINGS[groupIdx]!;
 
@@ -132,6 +180,31 @@ export function OrderBookPanel({
   const isLoading = depthStatus === "idle" || depthStatus === "connecting" || depthStatus === "snapshot";
   const visibleAsks = viewMode === "buy" ? [] : asks;
   const lastTrade = trades[0];
+
+  // correct right after React applies row changes, and again ~180ms later to catch
+  // AnimatePresence removing an exited row's DOM node after its fade-out
+  useLayoutEffect(() => {
+    function correctScroll() {
+      if (userInteractingRef.current) return;
+      const scrollEl = scrollContainerRef.current;
+      const midEl = midRowRef.current;
+      if (!scrollEl || !midEl) return;
+      const currentTop = midEl.getBoundingClientRect().top;
+      if (anchorTopRef.current == null) {
+        anchorTopRef.current = currentTop;
+        return;
+      }
+      const delta = currentTop - anchorTopRef.current;
+      if (delta !== 0) scrollEl.scrollTop += delta;
+    }
+
+    correctScroll();
+    if (correctionTimeoutRef.current != null) window.clearTimeout(correctionTimeoutRef.current);
+    correctionTimeoutRef.current = window.setTimeout(correctScroll, 180);
+    return () => {
+      if (correctionTimeoutRef.current != null) window.clearTimeout(correctionTimeoutRef.current);
+    };
+  }, [asks, bids]);
 
   const rootClass =
     variant === "mobile"
@@ -197,7 +270,11 @@ export function OrderBookPanel({
               <span className="text-right">Total</span>
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+            <div
+              ref={scrollContainerRef}
+              className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+              style={{ overflowAnchor: "none" }}
+            >
               <AnimatePresence initial={false}>
                 {visibleAsks.map((a) => (
                   <Row
@@ -213,7 +290,7 @@ export function OrderBookPanel({
                 ))}
               </AnimatePresence>
 
-              <div className="flex shrink-0 items-baseline gap-2 px-3 py-1.5">
+              <div ref={midRowRef} className="flex shrink-0 items-baseline gap-2 px-3 py-1.5">
                 <span
                   title="Last traded price"
                   className={`cursor-default text-[16px] font-bold ${lastTrade ? (lastTrade.side === "buy" ? "text-green" : "text-red") : "text-text"}`}
