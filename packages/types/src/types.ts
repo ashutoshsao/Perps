@@ -66,6 +66,17 @@ export const getKLinesApiSchema = z.object({
   limit: z.coerce.number().int().min(1).max(1000).default(200),
 })
 
+export const getFundingHistoryApiSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  cursor: z.string().optional(),
+})
+
+export const getPositionHistoryApiSchema = z.object({
+  symbol: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  cursor: z.string().optional(),
+})
+
 export type SignupApiType = z.infer<typeof SignupApiSchema>
 export type SigninApiType = z.infer<typeof SigninApiSchema>
 export type CreateOrderApiType = z.infer<typeof CreateOrderApiSchema>
@@ -73,3 +84,5 @@ export type CreateMarketApiType = z.infer<typeof CreateMarketApiSchema>
 export type AddBalanceApiType = z.infer<typeof AddBalanceApiSchema>
 export type OrderParams = z.infer<typeof OrderParamsSchema>
 export type DepthParams = z.infer<typeof DepthParamsSchema>
+export type GetFundingHistoryApiType = z.infer<typeof getFundingHistoryApiSchema>
+export type GetPositionHistoryApiType = z.infer<typeof getPositionHistoryApiSchema>

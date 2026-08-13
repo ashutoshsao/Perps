@@ -4,6 +4,7 @@ type OrderType = "market" | "limit";
 type Side = "buy" | "sell";
 type OrderStatus = "open" | "filled" | "partially_filled" | "cancelled"
 type PositionSide = "long" | "short";
+type PositionCloseType = "reduce" | "close" | "flip";
 
 export type EngineCommandType =
   | "create_order"
@@ -97,6 +98,7 @@ export type Position = {
   qty: number,
   margin: number,
   averagePrice: number,
+  openedAt: number,
 }
 
 
@@ -107,8 +109,25 @@ export type updatePositionPayload = {
   fillQty: number,
   fillPrice: number,
   fillMargin: number,
-  leverage: number
+  leverage: number,
+  fillCreatedAt: number,
 }
+
+export type PositionClose = {
+  userId: string,
+  symbol: string,
+  positionSide: PositionSide,
+  closeType: PositionCloseType,
+  entryPrice: number,
+  exitPrice: number,
+  qty: number,
+  realizedPnl: number,
+  marginReleased: number,
+  openedAt: number,
+  closedAt: number,
+}
+
+export type PositionCloseEvent = PositionClose & { closeId: string }
 export type Balance = {
   available: number,
   locked: number
@@ -192,6 +211,7 @@ export type CreateOrderResponse = {
   fills: Fill[]
   makerOrders: OrderRecord[]
   depthDiff: DepthDiff
+  closedPositions?: PositionCloseEvent[]
 }
 
 export type CancelOrderResponse = {
@@ -205,4 +225,17 @@ export type UpdateIndexPriceResponse = {
   symbol: string
   markPrice: number
   events: LiquidationEvent[]
+  predictedFundingRate: number
+  fundingSamples: number
+}
+
+export type FundingRateSnapshot = {
+  symbol: string
+  rate: number
+  settledAt: number
+}
+
+export type FundingRateResponse = {
+  rates: FundingRateSnapshot[]
+  settlements: Settlement[]
 }
