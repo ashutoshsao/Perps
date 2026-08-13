@@ -97,3 +97,48 @@ model FundingRate {
 
   @@unique([symbol, settledAt])
 }
+
+model ClosedPosition {
+  id             String            @id // `${fillId}-taker|maker` — deterministic, never uuid()
+  userId         String
+  marketId       String
+  symbol         String
+  positionSide   PositionSide
+  closeType      PositionCloseType
+  entryPrice     Int
+  exitPrice      Int
+  qty            Int
+  realizedPnl    Int
+  marginReleased Int
+  openedAt       DateTime
+  closedAt       DateTime
+  createdAt      DateTime          @default(now())
+
+  @@index([userId, closedAt(sort: Desc)])
+  @@index([userId, symbol, closedAt(sort: Desc)])
+}
+
+model FundingSettlement {
+  id                    String   @id @default(uuid())
+  userId                String
+  symbol                String
+  rate                  Float
+  payment               Int
+  marginAfter           Int
+  liquidationPriceAfter Int
+  settledAt             DateTime
+
+  @@unique([userId, symbol, settledAt])
+  @@index([userId, settledAt(sort: Desc)])
+}
+
+enum PositionSide {
+  long
+  short
+}
+
+enum PositionCloseType {
+  reduce
+  close
+  flip
+}
