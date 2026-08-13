@@ -55,5 +55,7 @@ An empty order book doesn't demo or feel real. Bots trading through the actual A
 ## Current known gaps
 
 - Single-process engine — no horizontal scaling story yet.
-- Liquidation math, insurance funds, fees, realized PnL, bankruptcy prices, and ADL ranking are simplified, not production-grade.
+- Liquidation math, insurance funds, bankruptcy prices, and ADL ranking are simplified, not production-grade.
+- There are no fees anywhere in the system. Closing a position now correctly releases margin and settles realized PnL into the user's balance, but `realizedPnl` is pure `(exit - entry) * qty` — gross, not net of any fee.
+- Money columns (`realizedPnl`, `marginReleased`, etc.) are `Int` cents, same convention as the rest of the schema, which caps them around $21.4M — flagged, not fixed.
 - `apps/web` is an active work in progress, not a finished client.

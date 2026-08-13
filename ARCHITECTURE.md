@@ -25,8 +25,8 @@ Money is integer cents everywhere outside the browser: order prices, index/mark 
 
 - React + TypeScript on Vite.
 - Tailwind CSS v4 for layout and design tokens.
-- TanStack Query for REST server state.
-- Zustand for auth, selected market, orderbook, trades, and UI state.
+- REST server state goes through a plain `useAsyncData` hook, not TanStack Query.
+- Auth, selected market, orders/positions, and UI state live in React Context providers (`AuthContext`, `MarketContext`, `OrdersContext`, etc.), not Zustand.
 - TradingView Lightweight Charts for candle charts.
 - Raw browser `WebSocket` wrapper for backend channels.
 
