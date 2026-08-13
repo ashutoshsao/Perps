@@ -3,6 +3,7 @@ import { NebulaLogo, ChevronDownIcon, MoonIcon, SearchIcon, SunIcon } from "../.
 import { navLinks } from "../../data/mockMarket";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
+import { useTheme } from "../../hooks/useTheme";
 import { DepositModal } from "../account/DepositModal";
 import { CreateMarketModal } from "../admin/CreateMarketModal";
 
@@ -27,20 +28,13 @@ export function TopNav() {
   const [accountOpen, setAccountOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const [createMarketOpen, setCreateMarketOpen] = useState(false);
-  const [theme, setTheme] = useState<"dark" | "light">(() =>
-    (localStorage.getItem("bp_theme") as "dark" | "light") ?? "dark",
-  );
+  const { theme, toggleTheme } = useTheme();
 
   const { token, username, openAuthModal, logout } = useAuth();
   const { push } = useToast();
 
   const moreRef = useClickOutside(() => setMoreOpen(false));
   const accountRef = useClickOutside(() => setAccountOpen(false));
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    localStorage.setItem("bp_theme", theme);
-  }, [theme]);
 
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-border-soft bg-panel px-6">
@@ -101,11 +95,7 @@ export function TopNav() {
           <SearchIcon size={17} />
         </button>
 
-        <button
-          type="button"
-          onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
-          className="text-text-muted hover:text-text"
-        >
+        <button type="button" onClick={toggleTheme} className="text-text-muted hover:text-text">
           {theme === "dark" ? <SunIcon size={17} /> : <MoonIcon size={17} />}
         </button>
 

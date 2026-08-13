@@ -1,13 +1,9 @@
 import "./index.css";
 
-import { TopNav } from "./components/layout/TopNav";
-import { MarketStrip } from "./components/layout/MarketStrip";
-import { BottomPanel } from "./components/layout/BottomPanel";
-import { FooterTicker } from "./components/layout/FooterTicker";
-import { MobileLayout } from "./components/layout/MobileLayout";
-import { ChartPanel } from "./features/chart/ChartPanel";
-import { OrderBookPanel } from "./features/orderbook/OrderBookPanel";
-import { OrderTicketPanel } from "./features/ticket/OrderTicketPanel";
+import { Route, Routes } from "react-router-dom";
+import { LandingPage } from "./pages/LandingPage";
+import { AboutPage } from "./pages/AboutPage";
+import { TradeApp } from "./pages/TradeApp";
 import { AuthModal } from "./components/auth/AuthModal";
 import { NotificationListener } from "./components/notifications/NotificationListener";
 import { ToastProvider } from "./context/ToastContext";
@@ -16,11 +12,8 @@ import { MarketProvider } from "./context/MarketContext";
 import { TradingProvider } from "./context/TradingContext";
 import { OrdersProvider } from "./context/OrdersContext";
 import { TicketProvider } from "./context/TicketContext";
-import { useIsMobile } from "./hooks/useIsMobile";
 
 export function App() {
-  const isMobile = useIsMobile();
-
   return (
     <ToastProvider>
       <AuthProvider>
@@ -28,27 +21,11 @@ export function App() {
           <TradingProvider>
             <OrdersProvider>
               <TicketProvider>
-                {isMobile ? (
-                  <MobileLayout />
-                ) : (
-                  <div className="flex h-screen min-w-[1200px] flex-col bg-bg text-text">
-                    <TopNav />
-
-                    <div className="flex min-h-0 flex-1">
-                      <div className="flex min-h-0 flex-1 flex-col">
-                        <MarketStrip />
-                        <div className="flex min-h-0 flex-1">
-                          <ChartPanel />
-                          <OrderBookPanel />
-                        </div>
-                        <BottomPanel />
-                      </div>
-                      <OrderTicketPanel />
-                    </div>
-
-                    <FooterTicker />
-                  </div>
-                )}
+                <Routes>
+                  <Route path="/" element={<LandingPage />} />
+                  <Route path="/about" element={<AboutPage />} />
+                  <Route path="/trade" element={<TradeApp />} />
+                </Routes>
                 <AuthModal />
                 <NotificationListener />
               </TicketProvider>
