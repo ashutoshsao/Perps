@@ -4,7 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import { NebulaLogo } from "../../icons";
 
-const DEMO_DEPOSIT_AMOUNT = 10000;
+const DEMO_DEPOSIT_AMOUNT = 1_000_000; // $10,000 — enough to feel like real trading money
 
 function CloseIcon({ size = 16 }: { size?: number }) {
   return (
@@ -169,9 +169,9 @@ export function AuthModal() {
           </button>
         </form>
 
-        <div className="mt-3 flex items-center gap-2 text-[11px] text-text-dim">
+        <div className="mt-3 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-text-dim">
           <div className="h-px flex-1 bg-border" />
-          or
+          or use instant login
           <div className="h-px flex-1 bg-border" />
         </div>
 
@@ -179,9 +179,10 @@ export function AuthModal() {
           type="button"
           onClick={handleDemo}
           disabled={isSubmitting}
-          className="mt-3 w-full rounded-lg border border-border py-2.5 text-[13px] font-semibold text-text hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+          title={`Instantly creates a guest account with a $${(DEMO_DEPOSIT_AMOUNT / 100).toLocaleString()} practice balance`}
+          className="mt-3 w-full rounded-lg border border-green/30 bg-green/10 py-2.5 text-[13px] font-semibold text-green hover:bg-green/15 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Try Demo
+          One-Click Demo Account
         </button>
 
         <p className="mt-4 text-center text-[12px] text-text-muted">

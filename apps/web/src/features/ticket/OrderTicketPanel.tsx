@@ -29,6 +29,7 @@ function CurrencyField({
   extra,
   readOnly,
   placeholder,
+  tooltip,
 }: {
   label: string;
   value: string;
@@ -38,11 +39,14 @@ function CurrencyField({
   extra?: React.ReactNode;
   readOnly?: boolean;
   placeholder?: string;
+  tooltip?: string;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
-        <span className="text-[12px] text-text-muted">{label}</span>
+        <span title={tooltip} className={`text-[12px] text-text-muted ${tooltip ? "w-fit cursor-default" : ""}`}>
+          {label}
+        </span>
         {extra}
       </div>
       <div className="flex items-center justify-between rounded-lg bg-surface px-3 py-2.5">
@@ -65,19 +69,21 @@ function CurrencyField({
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function InfoRow({ label, value, tooltip }: { label: string; value: string; tooltip?: string }) {
   return (
     <div className="flex items-center justify-between text-[12px]">
-      <span className="text-text-muted">{label}</span>
+      <span title={tooltip} className={`text-text-muted ${tooltip ? "w-fit cursor-default" : ""}`}>
+        {label}
+      </span>
       <span className="text-text-dim">{value}</span>
     </div>
   );
 }
 
-function DisabledCheckbox({ label }: { label: string }) {
+function DisabledCheckbox({ label, description }: { label: string; description: string }) {
   return (
     <label
-      title="Not supported yet"
+      title={`${description} — not supported yet`}
       className="flex cursor-not-allowed items-center gap-1.5 text-[12px] text-text-dim opacity-50"
     >
       <input type="checkbox" className="bp-checkbox" checked={false} disabled readOnly />
@@ -228,7 +234,9 @@ export function OrderTicketPanel({ variant = "desktop" }: { variant?: "desktop" 
       </div>
 
       <div className="flex items-center justify-between text-[12px]">
-        <span className="text-text-muted">Available Equity</span>
+        <span title="Total account value usable as margin for new positions" className="w-fit cursor-default text-text-muted">
+          Available Equity
+        </span>
         <span className="text-text">{balance ? `$${formatUsd(balance.available)}` : token ? "..." : "$0.00"}</span>
       </div>
 
@@ -260,7 +268,12 @@ export function OrderTicketPanel({ variant = "desktop" }: { variant?: "desktop" 
       ) : (
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-[12px] text-text-muted">Max slippage</span>
+            <span
+              title="Maximum price movement allowed between submitting and filling this market order"
+              className="w-fit cursor-default text-[12px] text-text-muted"
+            >
+              Max slippage
+            </span>
             <span className="text-[13px] font-semibold text-text">{formatPercent(slippagePercent)}</span>
           </div>
           <div className="grid grid-cols-5 gap-1.5">
@@ -284,7 +297,12 @@ export function OrderTicketPanel({ variant = "desktop" }: { variant?: "desktop" 
 
       <div>
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-[12px] text-text-muted">Leverage</span>
+          <span
+            title="Multiplier on your margin that determines position size and liquidation risk"
+            className="w-fit cursor-default text-[12px] text-text-muted"
+          >
+            Leverage
+          </span>
           <span className="text-[13px] font-semibold text-text">{leverage}x</span>
         </div>
         <input
@@ -310,11 +328,20 @@ export function OrderTicketPanel({ variant = "desktop" }: { variant?: "desktop" 
         badge="$"
         badgeBg="#00c896"
         readOnly
+        tooltip="Total notional size of the position — quantity multiplied by price"
       />
 
       <div className="flex flex-col gap-2">
-        <InfoRow label="Margin Required" value={estimatedMargin === null ? "—" : `$${formatNumber(estimatedMargin)}`} />
-        <InfoRow label="Est. Liquidation Price" value="Unavailable" />
+        <InfoRow
+          label="Margin Required"
+          value={estimatedMargin === null ? "—" : `$${formatNumber(estimatedMargin)}`}
+          tooltip="Collateral that will be locked to open this position at the selected leverage"
+        />
+        <InfoRow
+          label="Est. Liquidation Price"
+          value="Unavailable"
+          tooltip="Price at which this position would be automatically closed to prevent further losses"
+        />
       </div>
 
       {!hasEnoughBalance ? (
@@ -357,11 +384,11 @@ export function OrderTicketPanel({ variant = "desktop" }: { variant?: "desktop" 
 
       <div className="flex flex-col gap-2.5">
         <div className="flex items-center gap-4">
-          <DisabledCheckbox label="Post Only" />
-          <DisabledCheckbox label="IOC" />
-          <DisabledCheckbox label="Reduce Only" />
+          <DisabledCheckbox label="Post Only" description="Order only adds liquidity, and is rejected if it would fill immediately" />
+          <DisabledCheckbox label="IOC" description="Immediate-Or-Cancel: fills immediately in full or in part, then cancels the rest" />
+          <DisabledCheckbox label="Reduce Only" description="Order can only shrink or close your position, never increase it" />
         </div>
-        <DisabledCheckbox label="TP/SL" />
+        <DisabledCheckbox label="TP/SL" description="Take-Profit / Stop-Loss: auto-close orders set at target profit or loss levels" />
       </div>
     </div>
   );

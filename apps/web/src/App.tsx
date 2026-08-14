@@ -25,6 +25,7 @@ export function App() {
                   <Route path="/" element={<LandingPage />} />
                   <Route path="/about" element={<AboutPage />} />
                   <Route path="/trade" element={<TradeApp />} />
+                  <Route path="/trade/:symbol" element={<TradeApp />} />
                 </Routes>
                 <AuthModal />
                 <NotificationListener />

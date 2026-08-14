@@ -117,6 +117,7 @@ export function OrderBookPanel({
   // racy and can get misread as user scrolls during a correction burst
   const userInteractingRef = useRef(false);
   const interactionTimeoutRef = useRef<number | null>(null);
+  const settleFrameRef = useRef<number | null>(null);
 
   // re-center once per symbol on first real depth, never on a routine tick
   useEffect(() => {
@@ -129,8 +130,15 @@ export function OrderBookPanel({
     centeredRef.current = true;
     const id = requestAnimationFrame(() => {
       midRowRef.current?.scrollIntoView({ block: "center" });
+      // re-capture the anchor after centering lands, so the next correction doesn't undo it
+      settleFrameRef.current = requestAnimationFrame(() => {
+        anchorTopRef.current = midRowRef.current?.getBoundingClientRect().top ?? null;
+      });
     });
-    return () => cancelAnimationFrame(id);
+    return () => {
+      cancelAnimationFrame(id);
+      if (settleFrameRef.current != null) cancelAnimationFrame(settleFrameRef.current);
+    };
   }, [depth]);
 
   useEffect(() => {
@@ -272,7 +280,7 @@ export function OrderBookPanel({
 
             <div
               ref={scrollContainerRef}
-              className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+              className="flex min-h-0 flex-1 flex-col overflow-y-auto [justify-content:safe_center]"
               style={{ overflowAnchor: "none" }}
             >
               <AnimatePresence initial={false}>

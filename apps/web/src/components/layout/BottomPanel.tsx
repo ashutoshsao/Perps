@@ -1,13 +1,11 @@
 import { useState } from "react";
-import { ChevronDownIcon, ChevronRightIcon } from "../../icons";
+import { ChevronDownIcon } from "../../icons";
 import { bottomTabs } from "../../data/mockMarket";
 import { useOrders } from "../../context/OrdersContext";
 import { useMarket } from "../../context/MarketContext";
 import { useAuth } from "../../context/AuthContext";
 import { formatNumber, formatTime, formatUsd, usd } from "../../lib/format";
 import { getMarketSymbol } from "../../lib/markets";
-
-const UNSUPPORTED_TABS = new Set(["Borrows", "TWAP"]);
 
 export function BottomPanel() {
   const [tab, setTab] = useState("Positions");
@@ -70,7 +68,6 @@ export function BottomPanel() {
               </button>
             );
           })}
-          <ChevronRightIcon size={14} className="ml-1 text-text-muted" />
         </div>
 
         <div className="flex items-center gap-4">
@@ -111,8 +108,6 @@ export function BottomPanel() {
         <div className="flex flex-1 items-center justify-center text-[13px] text-text-dim">
           Log in to view balances, orders, and fills.
         </div>
-      ) : UNSUPPORTED_TABS.has(tab) ? (
-        <div className="flex flex-1 items-center justify-center text-[13px] text-text-dim">No records</div>
       ) : (
         <div className="flex flex-1 flex-col overflow-y-auto">
           {cancelError && <div className="px-4 py-1.5 text-[12px] text-red">{cancelError}</div>}
@@ -126,7 +121,9 @@ export function BottomPanel() {
                 </p>
               </div>
               <div className="rounded-lg bg-surface p-3">
-                <p className="text-[11px] text-text-dim">Locked</p>
+                <p title="Funds reserved as margin for open orders and positions" className="w-fit cursor-default text-[11px] text-text-dim">
+                  Locked
+                </p>
                 <p className="mt-1 text-[16px] font-semibold text-text">
                   {balanceLoading ? "..." : `$${formatUsd(balance?.locked ?? 0)}`}
                 </p>
@@ -141,9 +138,9 @@ export function BottomPanel() {
                   <span>Market</span>
                   <span>Side</span>
                   <span className="text-right">Qty</span>
-                  <span className="text-right">Entry</span>
-                  <span className="text-right">PnL</span>
-                  <span className="text-right">ROE</span>
+                  <span title="Average price the position was opened at" className="cursor-default text-right">Entry</span>
+                  <span title="Unrealized profit and loss on the open position" className="cursor-default text-right">PnL</span>
+                  <span title="Return on Equity: PnL as a percentage of margin used" className="cursor-default text-right">ROE</span>
                 </div>
                 {filteredPositions.map((position) => {
                   const mark = position.symbol === symbol && typeof markPrice === "number" ? usd(markPrice) : null;
@@ -184,7 +181,7 @@ export function BottomPanel() {
                   <span>Side</span>
                   <span className="text-right">Price</span>
                   <span className="text-right">Qty</span>
-                  <span className="text-right">Filled</span>
+                  <span title="Quantity of the order executed so far" className="cursor-default text-right">Filled</span>
                   <span className="text-right"></span>
                 </div>
                 {filteredOpenOrders.map((order) => (
@@ -256,7 +253,7 @@ export function BottomPanel() {
                 ))}
               </>
             )
-          ) : tab === "Position His" ? (
+          ) : tab === "Position History" ? (
             filteredPositionHistory.length === 0 ? (
               <div className="flex flex-1 items-center justify-center text-[13px] text-text-dim">No closed positions</div>
             ) : (
@@ -265,9 +262,9 @@ export function BottomPanel() {
                   <span>Market</span>
                   <span>Side</span>
                   <span className="text-right">Qty</span>
-                  <span className="text-right">Entry</span>
-                  <span className="text-right">Exit</span>
-                  <span className="text-right">PnL</span>
+                  <span title="Average price the position was opened at" className="cursor-default text-right">Entry</span>
+                  <span title="Average price the position was closed at" className="cursor-default text-right">Exit</span>
+                  <span title="Realized profit and loss on the closed position" className="cursor-default text-right">PnL</span>
                   <span className="text-right">Closed</span>
                 </div>
                 {filteredPositionHistory.map((close) => {

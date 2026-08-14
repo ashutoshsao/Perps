@@ -1,23 +1,40 @@
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
+import { CloseIcon } from "../icons";
 
-type Toast = { id: number; message: string; tone: "default" | "success" | "error" };
+type Toast = { id: number; message: string; tone: "default" | "success" | "error"; description?: string };
 
 type ToastContextValue = {
-  push: (message: string, tone?: Toast["tone"]) => void;
+  push: (message: string, tone?: Toast["tone"], description?: string) => void;
 };
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
+const TITLE_TONE_CLASS: Record<Toast["tone"], string> = {
+  default: "text-text",
+  success: "text-green",
+  error: "text-red",
+};
+
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const idRef = useRef(0);
+  const timeoutsRef = useRef(new Map<number, number>());
 
-  const push = useCallback((message: string, tone: Toast["tone"] = "default") => {
+  const dismiss = useCallback((id: number) => {
+    const timeout = timeoutsRef.current.get(id);
+    if (timeout != null) window.clearTimeout(timeout);
+    timeoutsRef.current.delete(id);
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const push = useCallback((message: string, tone: Toast["tone"] = "default", description?: string) => {
     const id = ++idRef.current;
-    setToasts((prev) => [...prev, { id, message, tone }]);
-    setTimeout(() => {
+    setToasts((prev) => [...prev, { id, message, tone, description }]);
+    const timeout = window.setTimeout(() => {
+      timeoutsRef.current.delete(id);
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3000);
+    }, 4000);
+    timeoutsRef.current.set(id, timeout);
   }, []);
 
   return (
@@ -27,15 +44,19 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((t) => (
           <div
             key={t.id}
-            className={`pointer-events-auto rounded-lg border px-3.5 py-2.5 text-[13px] font-medium shadow-lg backdrop-blur ${
-              t.tone === "success"
-                ? "border-green/30 bg-green/10 text-green"
-                : t.tone === "error"
-                  ? "border-red/30 bg-red/10 text-red"
-                  : "border-border bg-panel-2 text-text"
-            }`}
+            className="pointer-events-auto flex w-[320px] items-start gap-3 rounded-2xl border border-border-soft bg-panel-2 p-4 shadow-2xl"
           >
-            {t.message}
+            <div className="min-w-0 flex-1">
+              <p className={`text-[14px] font-semibold ${TITLE_TONE_CLASS[t.tone]}`}>{t.message}</p>
+              {t.description && <p className="mt-1 text-[13px] leading-snug text-text-muted">{t.description}</p>}
+            </div>
+            <button
+              type="button"
+              onClick={() => dismiss(t.id)}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface text-text-muted hover:bg-surface-2 hover:text-text"
+            >
+              <CloseIcon size={12} />
+            </button>
           </div>
         ))}
       </div>

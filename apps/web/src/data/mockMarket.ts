@@ -51,15 +51,13 @@ export const recentTrades = [
 
 export const navLinks = ["Spot", "Futures", "Lend", "Vault", "Stocks", "BP"];
 
-export const chartTabs = ["Chart", "Depth", "Margin", "Funding", "Market Info"];
+export const chartTabs = ["Chart", "Depth", "Market Info"];
 
 export const bottomTabs = [
   "Balances",
   "Positions",
   "Open Orders",
-  "Borrows",
-  "TWAP",
   "Fill History",
   "Order History",
-  "Position His",
+  "Position History",
 ];

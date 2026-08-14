@@ -3,10 +3,12 @@ import {
   CandlestickSeries,
   ColorType,
   HistogramSeries,
+  LineStyle,
   createChart,
   type CandlestickData,
   type HistogramData,
   type IChartApi,
+  type IPriceLine,
   type ISeriesApi,
   type UTCTimestamp,
   type WhitespaceData,
@@ -18,6 +20,8 @@ const GREEN = "#00c896";
 const RED = "#f6465d";
 const GRID = "#1a1c20";
 const AXIS_TEXT = "#5c6068";
+const MARK_LINE_COLOR = "#3b82f6";
+const INDEX_LINE_COLOR = "#a855f7";
 
 function toTime(bucket: string): UTCTimestamp {
   return Math.floor(new Date(bucket).getTime() / 1000) as UTCTimestamp;
@@ -110,11 +114,17 @@ export function PriceChart({
   showVolume,
   range,
   interval,
+  priceSource = "Last",
+  markPrice,
+  indexPrice,
 }: {
   candles: Candle[];
   showVolume: boolean;
   range: string;
   interval: string;
+  priceSource?: "Last" | "Mark" | "Index";
+  markPrice?: number;
+  indexPrice?: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -123,6 +133,7 @@ export function PriceChart({
   const candlesRef = useRef(candles);
   candlesRef.current = candles;
   const dataReadyRef = useRef(false);
+  const priceLineRef = useRef<IPriceLine | null>(null);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -169,6 +180,7 @@ export function PriceChart({
       chartRef.current = null;
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
+      priceLineRef.current = null;
     };
   }, []);
 
@@ -190,6 +202,36 @@ export function PriceChart({
     if (!dataReadyRef.current) return;
     applyVisibleRange(chartRef.current, candlesRef.current, range);
   }, [range, interval]);
+
+  // no historical mark/index series available, so overlay a live reference price line instead
+  useEffect(() => {
+    const series = candleSeriesRef.current;
+    if (!series) return;
+
+    const cents = priceSource === "Mark" ? markPrice : priceSource === "Index" ? indexPrice : undefined;
+
+    if (cents === undefined) {
+      if (priceLineRef.current) {
+        series.removePriceLine(priceLineRef.current);
+        priceLineRef.current = null;
+      }
+      return;
+    }
+
+    const price = usd(cents);
+    if (priceLineRef.current) {
+      priceLineRef.current.applyOptions({ price, title: priceSource });
+    } else {
+      priceLineRef.current = series.createPriceLine({
+        price,
+        color: priceSource === "Mark" ? MARK_LINE_COLOR : INDEX_LINE_COLOR,
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: priceSource,
+      });
+    }
+  }, [priceSource, markPrice, indexPrice]);
 
   return <div ref={containerRef} className="absolute inset-0" />;
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { BitcoinGlyph, ChevronDownIcon } from "../../icons";
+import { ChevronDownIcon } from "../../icons";
 import { Pill } from "../ui/Pill";
+import { MarketIcon } from "../ui/MarketIcon";
 import { useMarket } from "../../context/MarketContext";
 import {
   formatFundingRate,
@@ -22,14 +23,18 @@ function Stat({
   label,
   value,
   valueClass = "text-text",
+  tooltip,
 }: {
   label: string;
   value: string;
   valueClass?: string;
+  tooltip?: string;
 }) {
   return (
     <div className="flex flex-col gap-1 whitespace-nowrap">
-      <span className="text-[11px] font-medium text-text-dim">{label}</span>
+      <span title={tooltip} className={`text-[11px] font-medium text-text-dim ${tooltip ? "w-fit cursor-default" : ""}`}>
+        {label}
+      </span>
       <span className={`text-[13px] font-medium leading-none ${valueClass}`}>{value}</span>
     </div>
   );
@@ -70,7 +75,7 @@ export function MarketStrip() {
     <div className="flex h-[72px] shrink-0 items-center gap-8 border-b border-border-soft bg-panel px-6">
       <div className="relative" ref={ref}>
         <button type="button" onClick={() => setOpen((v) => !v)} className="flex items-center gap-2">
-          <BitcoinGlyph size={26} />
+          <MarketIcon symbol={market?.symbol ?? symbol ?? "?"} imageUrl={market?.imageUrl} size={26} />
           <span className="text-[16px] font-bold text-text">{market?.symbol ?? symbol ?? "..."}</span>
           {market && <Pill>{market.maxLeverage}x</Pill>}
           <ChevronDownIcon size={14} className={`text-text-muted ${open ? "rotate-180" : ""} transition-transform`} />
@@ -93,7 +98,10 @@ export function MarketStrip() {
                   m.symbol === symbol ? "text-text" : "text-text-muted"
                 }`}
               >
-                <span className="font-medium">{m.symbol}</span>
+                <span className="flex items-center gap-2">
+                  <MarketIcon symbol={m.symbol} imageUrl={m.imageUrl} size={20} />
+                  <span className="font-medium">{m.symbol}</span>
+                </span>
                 <span className="text-text-dim">{m.maxLeverage}x</span>
               </button>
             ))}
@@ -106,9 +114,22 @@ export function MarketStrip() {
         <span className="text-[12px] text-text-dim">{formatMarkPrice(markPrice)}</span>
       </div>
 
-      <Stat label="Index Price" value={formatMarkPrice(indexPrice)} />
-      <Stat label="Funding Rate" value={formatFundingRate(fundingRate)} valueClass={fundingClass} />
-      <Stat label="Next Funding" value={formatCountdown(fundingCountdown)} />
+      <Stat
+        label="Index Price"
+        value={formatMarkPrice(indexPrice)}
+        tooltip="Reference price from external spot markets, used to calculate funding and liquidations"
+      />
+      <Stat
+        label="Funding Rate"
+        value={formatFundingRate(fundingRate)}
+        valueClass={fundingClass}
+        tooltip="Periodic payment between longs and shorts that keeps the perp price anchored to the index price"
+      />
+      <Stat
+        label="Next Funding"
+        value={formatCountdown(fundingCountdown)}
+        tooltip="Time remaining until the next funding payment is settled"
+      />
       <Stat label="24H Change" value={formatTickerChange(ticker)} valueClass={toneClass} />
       <Stat label="24H High" value={ticker ? formatUsd(ticker.high) : "-"} />
       <Stat label="24H Low" value={ticker ? formatUsd(ticker.low) : "-"} />

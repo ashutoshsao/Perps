@@ -17,7 +17,10 @@ export function sortMarkets(markets: Market[]) {
 }
 
 export function getMarketSymbol(marketId: string, markets: Market[]) {
-  return markets.find((market) => market.id === marketId)?.symbol ?? marketId;
+  const known = markets.find((market) => market.id === marketId)?.symbol;
+  if (known) return known;
+  // historical orders can outlive a delisted/reseeded market — fall back to a short tag
+  return `Unknown (${marketId.slice(0, 8)})`;
 }
 
 export function splitMarketSymbol(symbol: string) {

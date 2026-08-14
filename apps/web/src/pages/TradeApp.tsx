@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { TopNav } from "../components/layout/TopNav";
 import { MarketStrip } from "../components/layout/MarketStrip";
 import { BottomPanel } from "../components/layout/BottomPanel";
@@ -8,13 +9,32 @@ import { ChartPanel } from "../features/chart/ChartPanel";
 import { OrderBookPanel } from "../features/orderbook/OrderBookPanel";
 import { OrderTicketPanel } from "../features/ticket/OrderTicketPanel";
 import { useIsMobile } from "../hooks/useIsMobile";
+import { useMarket } from "../context/MarketContext";
 
 export function TradeApp() {
   const isMobile = useIsMobile();
+  const { symbol: urlSymbol } = useParams<{ symbol?: string }>();
+  const navigate = useNavigate();
+  const { symbol, setSymbol } = useMarket();
+
+  // adopt the symbol from a direct link (e.g. /trade/BTC_USD_PERP)
+  useEffect(() => {
+    if (urlSymbol && urlSymbol !== symbol) {
+      setSymbol(urlSymbol);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlSymbol]);
+
+  // context -> URL: keep the address bar in sync so refresh/share/back-forward all work.
+  useEffect(() => {
+    if (symbol && symbol !== urlSymbol) {
+      navigate(`/trade/${symbol}`, { replace: true });
+    }
+  }, [symbol, urlSymbol, navigate]);
 
   useEffect(() => {
-    document.title = "BTC-PERP · Nebula";
-  }, []);
+    document.title = symbol ? `${symbol} · Nebula` : "Nebula";
+  }, [symbol]);
 
   if (isMobile) {
     return <MobileLayout />;

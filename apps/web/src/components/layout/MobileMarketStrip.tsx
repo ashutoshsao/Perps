@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { BitcoinGlyph, ChevronDownIcon } from "../../icons";
+import { ChevronDownIcon } from "../../icons";
 import { Pill } from "../ui/Pill";
+import { MarketIcon } from "../ui/MarketIcon";
 import { useMarket } from "../../context/MarketContext";
 import {
   formatFundingRate,
@@ -37,7 +38,7 @@ export function MobileMarketStrip() {
       <div className="flex items-center justify-between px-3 py-2.5">
         <div className="relative" ref={ref}>
           <button type="button" onClick={() => setPickerOpen((v) => !v)} className="flex items-center gap-1.5">
-            <BitcoinGlyph size={22} />
+            <MarketIcon symbol={market?.symbol ?? symbol ?? "?"} imageUrl={market?.imageUrl} size={22} />
             <span className="text-[14px] font-bold text-text">{market?.symbol ?? symbol ?? "..."}</span>
             {market && <Pill>{market.maxLeverage}x</Pill>}
             <ChevronDownIcon size={13} className={`text-text-muted ${pickerOpen ? "rotate-180" : ""} transition-transform`} />
@@ -58,7 +59,10 @@ export function MobileMarketStrip() {
                     m.symbol === symbol ? "text-text" : "text-text-muted"
                   }`}
                 >
-                  <span className="font-medium">{m.symbol}</span>
+                  <span className="flex items-center gap-2">
+                    <MarketIcon symbol={m.symbol} imageUrl={m.imageUrl} size={18} />
+                    <span className="font-medium">{m.symbol}</span>
+                  </span>
                   <span className="text-text-dim">{m.maxLeverage}x</span>
                 </button>
               ))}

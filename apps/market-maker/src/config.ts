@@ -52,7 +52,8 @@ export const MARKET_SPECS: MarketSpec[] = [
   },
   {
     symbol: "SOL-PERP",
-    imageUrl: `${ICONS}/sol.png`,
+    // trustwallet has correct SOL branding and isn't ad-blocked like coinmarketcap
+    imageUrl: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/solana/info/logo.png",
     maxLeverage: 20,
     minQty: 1,
     levels: 6,

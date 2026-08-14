@@ -2,6 +2,8 @@ import { useRef, useState } from "react";
 import { SegmentedControl, TextTabs } from "../../components/ui/Tabs";
 import { ChartToolbar } from "./ChartToolbar";
 import { PriceChart } from "./PriceChart";
+import { DepthChart } from "./DepthChart";
+import { MarketInfoPanel } from "./MarketInfoPanel";
 import { chartTabs } from "../../data/mockMarket";
 import { useMarket } from "../../context/MarketContext";
 import { useTrading } from "../../context/TradingContext";
@@ -18,7 +20,7 @@ export function ChartPanel() {
   const [scale, setScale] = useState("auto");
   const [showVolume, setShowVolume] = useState(true);
 
-  const { market, ticker } = useMarket();
+  const { market, ticker, markPrice, indexPrice } = useMarket();
   const { candles, candlesLoading, candlesError, chartInterval, setChartInterval, tradesLive, tradesError } = useTrading();
   const { push } = useToast();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -57,76 +59,96 @@ export function ChartPanel() {
         <div className="shrink-0">
           <TextTabs items={chartTabs} active={tab} onChange={setTab} />
         </div>
-        <div className="shrink-0">
-          <SegmentedControl items={["Last", "Mark", "Index"]} active={priceSource} onChange={setPriceSource} />
-        </div>
-      </div>
-
-      <ChartToolbar
-        interval={chartInterval}
-        onIntervalChange={setChartInterval}
-        showVolume={showVolume}
-        onToggleVolume={() => setShowVolume((v) => !v)}
-        onFullscreen={handleFullscreen}
-        onReset={handleReset}
-      />
-
-      <div className="relative min-h-0 flex-1 overflow-hidden px-1 pt-2">
-        <div className="pointer-events-none absolute left-3 top-2 z-10 flex items-center gap-1.5 text-[12px] text-text-muted">
-          <span className="font-medium text-text">{market?.symbol ?? "Loading markets"} · {chartInterval} · Nebula</span>
-          <span className={`h-1.5 w-1.5 rounded-full ${tradesLive ? "bg-green" : "bg-text-dim"}`} />
-          {ohlc && (
-            <span>
-              O<span className="text-text">{ohlc.open}</span> H<span className="text-text">{ohlc.high}</span> L
-              <span className="text-text">{ohlc.low}</span> C<span className="text-text">{ohlc.close}</span>
-            </span>
-          )}
-        </div>
-
-        {candlesError && candles.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-[13px] text-red">Chart unavailable: {candlesError}</div>
-        ) : candlesLoading && candles.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-[13px] text-text-dim">Loading chart...</div>
-        ) : (
-          <PriceChart candles={candles} showVolume={showVolume} range={range} interval={chartInterval} />
-        )}
-        {tradesError && (
-          <div className="pointer-events-none absolute bottom-2 left-3 z-10 text-[11px] text-red">Live trades unavailable: {tradesError}</div>
+        {tab === "Chart" && (
+          <div className="shrink-0">
+            <SegmentedControl items={["Last", "Mark", "Index"]} active={priceSource} onChange={setPriceSource} />
+          </div>
         )}
       </div>
 
-      <div className="flex h-9 shrink-0 items-center justify-between gap-4 overflow-x-auto border-t border-border-soft px-3">
-        <div className="flex shrink-0 items-center gap-4">
-          {ranges.map((r) => (
-            <button
-              key={r}
-              type="button"
-              onClick={() => setRange(r)}
-              className={`text-[12px] font-medium ${
-                range === r ? "text-text" : "text-text-muted hover:text-text"
-              }`}
-            >
-              {r}
-            </button>
-          ))}
-        </div>
+      {tab === "Chart" ? (
+        <>
+          <ChartToolbar
+            interval={chartInterval}
+            onIntervalChange={setChartInterval}
+            showVolume={showVolume}
+            onToggleVolume={() => setShowVolume((v) => !v)}
+            onFullscreen={handleFullscreen}
+            onReset={handleReset}
+          />
 
-        <div className="flex shrink-0 items-center gap-4">
-          <span className="text-[12px] text-text-muted">{ticker ? "Live" : "-"}</span>
-          {scaleToggles.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setScale(s)}
-              className={`text-[12px] font-medium ${
-                scale === s ? "text-blue" : "text-text-muted hover:text-text"
-              }`}
-            >
-              {s}
-            </button>
-          ))}
+          <div className="relative min-h-0 flex-1 overflow-hidden px-1 pt-2">
+            <div className="pointer-events-none absolute left-3 top-2 z-10 flex items-center gap-1.5 text-[12px] text-text-muted">
+              <span className="font-medium text-text">{market?.symbol ?? "Loading markets"} · {chartInterval} · Nebula</span>
+              <span className={`h-1.5 w-1.5 rounded-full ${tradesLive ? "bg-green" : "bg-text-dim"}`} />
+              {ohlc && (
+                <span>
+                  O<span className="text-text">{ohlc.open}</span> H<span className="text-text">{ohlc.high}</span> L
+                  <span className="text-text">{ohlc.low}</span> C<span className="text-text">{ohlc.close}</span>
+                </span>
+              )}
+            </div>
+
+            {candlesError && candles.length === 0 ? (
+              <div className="flex h-full items-center justify-center text-[13px] text-red">Chart unavailable: {candlesError}</div>
+            ) : candlesLoading && candles.length === 0 ? (
+              <div className="flex h-full items-center justify-center text-[13px] text-text-dim">Loading chart...</div>
+            ) : (
+              <PriceChart
+                candles={candles}
+                showVolume={showVolume}
+                range={range}
+                interval={chartInterval}
+                priceSource={priceSource as "Last" | "Mark" | "Index"}
+                markPrice={markPrice}
+                indexPrice={indexPrice}
+              />
+            )}
+            {tradesError && (
+              <div className="pointer-events-none absolute bottom-2 left-3 z-10 text-[11px] text-red">Live trades unavailable: {tradesError}</div>
+            )}
+          </div>
+
+          <div className="flex h-9 shrink-0 items-center justify-between gap-4 overflow-x-auto border-t border-border-soft px-3">
+            <div className="flex shrink-0 items-center gap-4">
+              {ranges.map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setRange(r)}
+                  className={`text-[12px] font-medium ${
+                    range === r ? "text-text" : "text-text-muted hover:text-text"
+                  }`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex shrink-0 items-center gap-4">
+              <span className="text-[12px] text-text-muted">{ticker ? "Live" : "-"}</span>
+              {scaleToggles.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setScale(s)}
+                  className={`text-[12px] font-medium ${
+                    scale === s ? "text-blue" : "text-text-muted hover:text-text"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      ) : tab === "Depth" ? (
+        <div className="relative min-h-0 flex-1 overflow-hidden p-2">
+          <DepthChart />
         </div>
-      </div>
+      ) : (
+        <MarketInfoPanel />
+      )}
     </div>
   );
 }
