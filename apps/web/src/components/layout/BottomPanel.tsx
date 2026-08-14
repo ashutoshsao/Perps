@@ -7,7 +7,7 @@ import { useAuth } from "../../context/AuthContext";
 import { formatNumber, formatTime, formatUsd, usd } from "../../lib/format";
 import { getMarketSymbol } from "../../lib/markets";
 
-export function BottomPanel() {
+export function BottomPanel({ variant = "desktop" }: { variant?: "desktop" | "mobile" } = {}) {
   const [tab, setTab] = useState("Positions");
   const [currentMarket, setCurrentMarket] = useState(false);
   const [cancelingId, setCancelingId] = useState<string | null>(null);
@@ -44,7 +44,11 @@ export function BottomPanel() {
   }
 
   return (
-    <div className="flex h-[160px] shrink-0 flex-col border-t border-border-soft bg-panel">
+    <div
+      className={`flex flex-col border-t border-border-soft bg-panel ${
+        variant === "mobile" ? "h-full min-h-0 flex-1" : "h-[160px] shrink-0"
+      }`}
+    >
       <div className="flex h-11 shrink-0 items-center justify-between border-b border-border-soft px-4">
         <div className="flex items-center gap-1">
           {bottomTabs.map((t) => {
