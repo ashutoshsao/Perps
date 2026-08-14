@@ -3,7 +3,7 @@ export const hero = {
   headline: "Trade price direction. Own nothing.",
   subhead:
     "Nebula is a perpetual futures exchange — go long or short on price with leverage, matched by a real order book, settled in real time.",
-  primaryCta: { label: "Open the terminal", to: "/trade" },
+  primaryCta: { label: "Start trading", to: "/trade" },
   secondaryCta: { label: "How it works", to: "/about" },
 };
 

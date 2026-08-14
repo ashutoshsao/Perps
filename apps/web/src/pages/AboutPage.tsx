@@ -93,7 +93,7 @@ export function AboutPage() {
             to="/trade"
             className="rounded-full bg-text px-6 py-3 text-[14px] font-semibold text-bg hover:bg-text/90"
           >
-            Open the terminal
+            Start trading
           </Link>
           <Link to="/" className="text-[14px] font-medium text-text-muted hover:text-text">
             Back to home
