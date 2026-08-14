@@ -64,9 +64,14 @@ export function createOrder(payload: createOrderPayload, streamMsgId: string, or
 
   ORDERS.set(order.orderId, order);
 
-  const { fills, remainingQty, totalCost, touchedAskPrices, touchedBidPrices } = matchOrder(limitPrice, order, streamMsgId);
+  const { fills, remainingQty, touchedAskPrices, touchedBidPrices } = matchOrder(limitPrice, order, streamMsgId);
 
   const closedPositions: PositionCloseEvent[] = [];
+
+  // track opening (new-exposure) qty/cost separately from closing qty, which is
+  // unwound via marginReleased + nettingMargin instead
+  let takerOpeningQty = 0;
+  let takerOpeningCost = 0;
 
   for (const fill of fills) {
 
@@ -89,15 +94,22 @@ export function createOrder(payload: createOrderPayload, streamMsgId: string, or
       usdBalance.locked -= takerClose.marginReleased;
       usdBalance.available += takerClose.marginReleased + takerClose.realizedPnl;
 
-      // the order-level lock above charged this fill's full qty as fresh exposure;
-      // the portion that actually closed/reduced an existing position doesn't need
-      // its own margin — that's already covered by marginReleased above, so undo
-      // the redundant order-level lock for exactly that portion
-      const nettingMargin = Math.floor(Number(BigInt(takerClose.qty) * BigInt(fill.price) / BigInt(order.leverage)));
+      // release what was locked for the closing qty at limitPrice (not fill.price,
+      // which can differ and would release the wrong amount)
+      const nettingMargin = Math.floor(Number(BigInt(takerClose.qty) * BigInt(limitPrice) / BigInt(order.leverage)));
       usdBalance.locked -= nettingMargin;
       usdBalance.available += nettingMargin;
 
+      const openingQty = fill.qty - takerClose.qty;
+      if (openingQty > 0) {
+        takerOpeningQty += openingQty;
+        takerOpeningCost += openingQty * fill.price;
+      }
+
       closedPositions.push({ ...takerClose, closeId: `${fill.fillId}-taker` });
+    } else {
+      takerOpeningQty += fill.qty;
+      takerOpeningCost += fill.qty * fill.price;
     }
 
     //makerOrder update and position update
@@ -128,9 +140,7 @@ export function createOrder(payload: createOrderPayload, streamMsgId: string, or
         makerBalance.locked -= makerClose.marginReleased;
         makerBalance.available += makerClose.marginReleased + makerClose.realizedPnl;
 
-        // same netting correction as the taker side, applied to the maker's own
-        // order-level lock (maker fills always execute at the maker's own locked-in
-        // price, so no separate price-delta refund is needed here beyond this)
+        // maker fills always execute at the maker's own locked-in price, so fill.price is fine here
         const nettingMargin = Math.floor(Number(BigInt(makerClose.qty) * BigInt(fill.price) / BigInt(makerOrder.leverage)));
         makerBalance.locked -= nettingMargin;
         makerBalance.available += nettingMargin;
@@ -174,9 +184,9 @@ export function createOrder(payload: createOrderPayload, streamMsgId: string, or
       usdBalance.available += remainingMargin
     }
   }
-  // return the delta of locked vs actual trade price
-  const lockedForFill = Math.floor(Number(BigInt(order.filledQty) * BigInt(limitPrice) / BigInt(leverage)));
-  const actualSpend = Math.floor(totalCost / leverage);
+  // reconcile locked-at-limitPrice vs actual spend, for the opening qty only (closing qty was already settled above)
+  const lockedForFill = Math.floor(Number(BigInt(takerOpeningQty) * BigInt(limitPrice) / BigInt(leverage)));
+  const actualSpend = Math.floor(takerOpeningCost / leverage);
   const refund = lockedForFill - actualSpend;
 
   usdBalance.locked -= refund;

@@ -126,7 +126,10 @@ export function updatePosition(payload: updatePositionPayload): PositionClose | 
       symbolPosition.qty = remainingQty;
       symbolPosition.averagePrice = payload.fillPrice;
       symbolPosition.liquidationPrice = newLiqPrice;
-      symbolPosition.margin = payload.fillMargin;
+      // scale margin down to remainingQty — fillMargin was computed for the whole fill
+      symbolPosition.margin = Math.floor(
+        Number(BigInt(remainingQty) * BigInt(payload.fillPrice) / BigInt(payload.leverage))
+      );
       symbolPosition.openedAt = payload.fillCreatedAt;
 
       return {
