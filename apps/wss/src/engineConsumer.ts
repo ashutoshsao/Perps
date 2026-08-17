@@ -4,6 +4,7 @@ import { CancelOrderResponse, CreateOrderResponse, FundingRateResponse, REDIS_KE
 const WSS_EVENTS = new Set(["create_order", "cancel_order", "funding_rate", "update_index_price"]);
 const GROUP = "wss"
 const CONSUMER = `wss-${crypto.randomUUID()}`;
+const CLAIM_IDLE_MS = 30_000;
 
 
 export async function readEngineEmits() {
@@ -32,20 +33,77 @@ export async function readEngineEmits() {
     }
   }
 
+  async function handleMessage(id: string, message: Record<string, string>) {
+    const type = message.type
+    const ok = message.ok === 'true'
+
+    if (!WSS_EVENTS.has(type) || !ok) {
+      await readClient.xAck(REDIS_KEYS.engineEvents, GROUP, id)
+      return
+    }
+    if (type === "create_order") {
+      //create_order
+      const data = JSON.parse(message.data) as CreateOrderResponse;
+      await publishCreateOrderEvent(data);
+    }
+    else if (type === "cancel_order") {
+      //cancel_order
+      const data = JSON.parse(message.data) as CancelOrderResponse;
+
+      await publishClient.publish(`market:${data.order.symbol}:depth`, JSON.stringify(data.depthDiff))
+
+      await publishClient.publish(`user:${data.order.userId}:orders`, JSON.stringify(data.order))
+    }
+    else if (type === "funding_rate") {
+      const { rates, settlements } = JSON.parse(message.data) as FundingRateResponse;
+
+      for (const { symbol, rate, settledAt } of rates) {
+        await publishClient.publish(`market:${symbol}:funding`, JSON.stringify({ symbol, rate, settledAt }))
+      }
+
+      for (const settlement of settlements) {
+        await publishClient.publish(`user:${settlement.userId}:funding`, JSON.stringify(settlement))
+      }
+    }
+    else if (type === "update_index_price") {
+      // mark price is published straight from the engine via pub/sub — this
+      // stream branch only ever sees ticks carrying liquidation/ADL events
+      const { events } = JSON.parse(message.data) as UpdateIndexPriceResponse;
+
+      for (const event of events) {
+        await publishCreateOrderEvent(event)
+        if (event.reason) {
+          await publishClient.publish(`user:${event.order.userId}:notifications`, JSON.stringify({
+            type: event.reason, symbol: event.order.symbol, qty: event.order.qty
+          }))
+        }
+      }
+    }
+    await readClient.xAck(REDIS_KEYS.engineEvents, GROUP, id)
+  }
+
+  // reclaims entries left pending by consumers that crashed/restarted before acking —
+  // previously this just discarded them unread on startup
+  async function claimStale() {
+    let cursor = '0-0'
+    do {
+      const result = await readClient.xAutoClaim(REDIS_KEYS.engineEvents, GROUP, CONSUMER, CLAIM_IDLE_MS, cursor, { COUNT: 100 })
+      for (const msg of result.messages) {
+        if (!msg) continue
+        await handleMessage(msg.id, msg.message)
+      }
+      cursor = result.nextId
+    } while (cursor !== '0-0')
+  }
+
   try {
     await readClient.xGroupCreate(REDIS_KEYS.engineEvents, GROUP, '0', { MKSTREAM: true })
   } catch {
     // group already exists — fine
   }
 
-  // acknowledge stale pending messages on startup
-  while (true) {
-    const pending = await readClient.xPendingRange(REDIS_KEYS.engineEvents, GROUP, '-', '+', 100)
-    if (pending.length === 0) break
-    for (const msg of pending) {
-      await readClient.xAck(REDIS_KEYS.engineEvents, GROUP, msg.id)
-    }
-  }
+  await claimStale()
+  setInterval(() => claimStale().catch((err) => console.error("claimStale failed:", err)), CLAIM_IDLE_MS)
 
   while (true) {
     const streams = await readClient.xReadGroup(GROUP, CONSUMER, [{ key: REDIS_KEYS.engineEvents, id: ">" }], {
@@ -55,52 +113,7 @@ export async function readEngineEmits() {
     if (!streams) continue;
     for (const stream of streams) {
       for (const msg of stream.messages) {
-        const type = msg.message.type
-        const ok = msg.message.ok === 'true'
-
-        if (!WSS_EVENTS.has(type) || !ok) {
-          await readClient.xAck(REDIS_KEYS.engineEvents, GROUP, msg.id)
-          continue
-        }
-        if (type === "create_order") {
-          //create_order
-          const data = JSON.parse(msg.message.data) as CreateOrderResponse;
-          await publishCreateOrderEvent(data);
-        }
-        else if (type === "cancel_order") {
-          //cancel_order
-          const data = JSON.parse(msg.message.data) as CancelOrderResponse;
-
-          await publishClient.publish(`market:${data.order.symbol}:depth`, JSON.stringify(data.depthDiff))
-
-          await publishClient.publish(`user:${data.order.userId}:orders`, JSON.stringify(data.order))
-        }
-        else if (type === "funding_rate") {
-          const { rates, settlements } = JSON.parse(msg.message.data) as FundingRateResponse;
-
-          for (const { symbol, rate, settledAt } of rates) {
-            await publishClient.publish(`market:${symbol}:funding`, JSON.stringify({ symbol, rate, settledAt }))
-          }
-
-          for (const settlement of settlements) {
-            await publishClient.publish(`user:${settlement.userId}:funding`, JSON.stringify(settlement))
-          }
-        }
-        else if (type === "update_index_price") {
-          // mark price is published straight from the engine via pub/sub — this
-          // stream branch only ever sees ticks carrying liquidation/ADL events
-          const { events } = JSON.parse(msg.message.data) as UpdateIndexPriceResponse;
-
-          for (const event of events) {
-            await publishCreateOrderEvent(event)
-            if (event.reason) {
-              await publishClient.publish(`user:${event.order.userId}:notifications`, JSON.stringify({
-                type: event.reason, symbol: event.order.symbol, qty: event.order.qty
-              }))
-            }
-          }
-        }
-        await readClient.xAck(REDIS_KEYS.engineEvents, GROUP, msg.id)
+        await handleMessage(msg.id, msg.message)
       }
     }
   }

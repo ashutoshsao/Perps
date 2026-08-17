@@ -7,6 +7,38 @@ const readRedis = getRedisClient();
 const DB_EVENTS = new Set(["update_index_price", "funding_rate", "create_order", "cancel_order"]);
 const GROUP = "db-poller"
 const CONSUMER = `dbPoller-${crypto.randomUUID()}`
+const CLAIM_IDLE_MS = 30_000
+
+async function handleMessage(client: Awaited<typeof readRedis>, id: string, message: Record<string, string>) {
+  const { type, ok, data } = message
+
+  if (!DB_EVENTS.has(type) || ok !== 'true') {
+    await client.xAck(REDIS_KEYS.engineEvents, GROUP, id)
+    return
+  }
+
+  try {
+    await updateDb(type, data ? JSON.parse(data) : undefined)
+    await client.xAck(REDIS_KEYS.engineEvents, GROUP, id)
+  } catch (err) {
+    console.error("DB write failed:", err)
+    // don't ack — message stays pending, will be reclaimed by claimStale
+  }
+}
+
+// reclaims entries left pending by consumers that crashed/restarted before acking —
+// without this, every dead consumer's in-flight messages are lost forever
+async function claimStale(client: Awaited<typeof readRedis>) {
+  let cursor = '0-0'
+  do {
+    const result = await client.xAutoClaim(REDIS_KEYS.engineEvents, GROUP, CONSUMER, CLAIM_IDLE_MS, cursor, { COUNT: 100 })
+    for (const msg of result.messages) {
+      if (!msg) continue
+      await handleMessage(client, msg.id, msg.message)
+    }
+    cursor = result.nextId
+  } while (cursor !== '0-0')
+}
 
 async function dbPoller() {
   const client = await readRedis;
@@ -15,6 +47,10 @@ async function dbPoller() {
   } catch {
     // group already exists — fine
   }
+
+  await claimStale(client)
+  setInterval(() => claimStale(client).catch((err) => console.error("claimStale failed:", err)), CLAIM_IDLE_MS)
+
   while (true) {
     const streams = await client.xReadGroup(GROUP, CONSUMER, [{
       key: REDIS_KEYS.engineEvents,
@@ -27,22 +63,7 @@ async function dbPoller() {
     if (!streams) continue;
     for (const stream of streams) {
       for (const msg of stream.messages) {
-        //skip rest types other then dbEvents
-        const { type, ok, data } = msg.message
-
-        if (!DB_EVENTS.has(type) || ok !== 'true') {
-          // ack and skip — not our concern
-          await client.xAck(REDIS_KEYS.engineEvents, GROUP, msg.id)
-          continue
-        }
-
-        try {
-          await updateDb(type, data ? JSON.parse(data) : undefined)
-          await client.xAck(REDIS_KEYS.engineEvents, GROUP, msg.id)
-        } catch (err) {
-          console.error("DB write failed:", err)
-          // don't ack — message will be redelivered on restart
-        }
+        await handleMessage(client, msg.id, msg.message)
       }
     }
   }

@@ -86,6 +86,8 @@ async function startUp() {
                 ok: 'true',
                 error: '',
                 data: JSON.stringify(response),
+              }, {
+                TRIM: { strategy: 'MAXLEN', strategyModifier: '~', threshold: 10_000 }
               })
 
               for (const event of events) {
@@ -104,6 +106,8 @@ async function startUp() {
               ok: 'true',
               error: '',
               data: JSON.stringify(response),
+            }, {
+              TRIM: { strategy: 'MAXLEN', strategyModifier: '~', threshold: 10_000 }
             })
 
             if (type === "create_order") {
@@ -121,7 +125,12 @@ async function startUp() {
               ok: 'true',
               error: '',
               data: JSON.stringify(response),
+            }, {
+              TRIM: { strategy: 'MAXLEN', strategyModifier: '~', threshold: 100 }
             })
+            // caller's process may never come back to read this (crash/restart) —
+            // let the queue self-destruct instead of leaking forever
+            await writeRedis.expire(responseQueue, 300)
           }
         }
         catch (err) {
@@ -131,7 +140,10 @@ async function startUp() {
             ok: 'false',
             error: (err as Error).message,
             data: '',
+          }, {
+            TRIM: { strategy: 'MAXLEN', strategyModifier: '~', threshold: 100 }
           })
+          await writeRedis.expire(responseQueue, 300)
         }
       }
     }
@@ -139,6 +151,8 @@ async function startUp() {
       try {
         await saveSnapshot(lastSeenId)
         lastSnapshotTime = Date.now()
+        // safe to drop anything older than what's now durably snapshotted
+        await writeRedis.xTrim(REDIS_KEYS.engineCommands, 'MINID', lastSeenId)
       } catch (err) {
         console.log(`Snapshot save failed, will retry next interval: ${(err as Error).message}`)
       }
