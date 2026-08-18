@@ -8,7 +8,7 @@ import { chartTabs } from "../../data/mockMarket";
 import { useMarket } from "../../context/MarketContext";
 import { useTrading } from "../../context/TradingContext";
 import { useToast } from "../../context/ToastContext";
-import { formatUsd } from "../../lib/format";
+import { formatUsd, localTimeZoneLabel } from "../../lib/format";
 
 const ranges = ["All", "1y", "6m", "3m", "1m", "5d", "1d"];
 const scaleToggles = ["%", "log", "auto"];
@@ -81,6 +81,9 @@ export function ChartPanel() {
             <div className="pointer-events-none absolute left-3 top-2 z-10 flex items-center gap-1.5 text-[12px] text-text-muted">
               <span className="font-medium text-text">{market?.symbol ?? "Loading markets"} · {chartInterval} · Nebula</span>
               <span className={`h-1.5 w-1.5 rounded-full ${tradesLive ? "bg-green" : "bg-text-dim"}`} />
+              <span title="Chart times are shown in your local timezone" className="cursor-default rounded border border-border-soft px-1 py-px text-[10px] text-text-dim">
+                {localTimeZoneLabel}
+              </span>
               {ohlc && (
                 <span>
                   O<span className="text-text">{ohlc.open}</span> H<span className="text-text">{ohlc.high}</span> L

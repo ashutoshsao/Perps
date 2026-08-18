@@ -5,7 +5,7 @@ import { DepthBuyIcon, DepthFullIcon, DepthSplitIcon, LockIcon, MinusIcon, PlusI
 import { useTrading } from "../../context/TradingContext";
 import { useTicket } from "../../context/TicketContext";
 import { useMarket } from "../../context/MarketContext";
-import { formatNumber, formatTime, formatUsd, usd } from "../../lib/format";
+import { formatNumber, formatTime, formatUsd, localTimeZoneLabel, usd } from "../../lib/format";
 
 // aggregation steps in cents: $0.01, $0.10, $1, $10, $100
 const GROUPINGS = [1, 10, 100, 1000, 10000];
@@ -344,7 +344,9 @@ export function OrderBookPanel({
           <div className="grid grid-cols-3 px-3 py-1.5 text-[11px] font-medium text-text-dim">
             <span>Price</span>
             <span className="text-right">Size</span>
-            <span className="text-right">Time</span>
+            <span title={`Times shown in your local timezone (${localTimeZoneLabel})`} className="cursor-default whitespace-nowrap text-right">
+              Time ({localTimeZoneLabel})
+            </span>
           </div>
           {tradesLoading && trades.length === 0 ? (
             <div className="flex flex-1 items-center justify-center text-[13px] text-text-dim">Loading trades...</div>

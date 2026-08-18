@@ -4,7 +4,7 @@ import { bottomTabs } from "../../data/mockMarket";
 import { useOrders } from "../../context/OrdersContext";
 import { useMarket } from "../../context/MarketContext";
 import { useAuth } from "../../context/AuthContext";
-import { formatNumber, formatTime, formatUsd, usd } from "../../lib/format";
+import { formatNumber, formatTime, formatUsd, localTimeZoneLabel, usd } from "../../lib/format";
 import { getMarketSymbol } from "../../lib/markets";
 
 export function BottomPanel({ variant = "desktop" }: { variant?: "desktop" | "mobile" } = {}) {
@@ -244,7 +244,9 @@ export function BottomPanel({ variant = "desktop" }: { variant?: "desktop" | "mo
                   <span>Side</span>
                   <span className="text-right">Price</span>
                   <span className="text-right">Qty</span>
-                  <span className="text-right">Time</span>
+                  <span title={`Times shown in your local timezone (${localTimeZoneLabel})`} className="cursor-default whitespace-nowrap text-right">
+                    Time ({localTimeZoneLabel})
+                  </span>
                 </div>
                 {filteredFills.map((fill) => (
                   <div key={fill.id} className="grid grid-cols-5 gap-2 px-4 py-1.5 text-[12px]">
@@ -269,7 +271,9 @@ export function BottomPanel({ variant = "desktop" }: { variant?: "desktop" | "mo
                   <span title="Average price the position was opened at" className="cursor-default text-right">Entry</span>
                   <span title="Average price the position was closed at" className="cursor-default text-right">Exit</span>
                   <span title="Realized profit and loss on the closed position" className="cursor-default text-right">PnL</span>
-                  <span className="text-right">Closed</span>
+                  <span title={`Times shown in your local timezone (${localTimeZoneLabel})`} className="cursor-default whitespace-nowrap text-right">
+                    Closed ({localTimeZoneLabel})
+                  </span>
                 </div>
                 {filteredPositionHistory.map((close) => {
                   const pnl = usd(close.realizedPnl);

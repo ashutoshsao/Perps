@@ -39,6 +39,21 @@ export function formatTime(value: string) {
   return date.toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
+// Short local timezone label (e.g. "IST", "GMT+5:30") for annotating any UI that
+// displays a wall-clock time, so viewers in different regions aren't left guessing
+// which zone a timestamp is in. Resolved once from the browser/runtime, same source
+// `formatTime` already uses implicitly via `toLocaleTimeString`.
+export const localTimeZoneLabel = (() => {
+  try {
+    const part = new Intl.DateTimeFormat(undefined, { timeZoneName: "short" })
+      .formatToParts(new Date())
+      .find((p) => p.type === "timeZoneName");
+    return part?.value ?? "Local";
+  } catch {
+    return "Local";
+  }
+})();
+
 export function parsePositiveInt(value: string) {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed <= 0) return null;

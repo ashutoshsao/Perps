@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { formatUsd, parseUsdToCents, usd } from "./format";
+import { formatUsd, localTimeZoneLabel, parseUsdToCents, usd } from "./format";
 
 describe("cents boundary", () => {
   it("parses dollar input into exact integer cents", () => {
@@ -26,5 +26,22 @@ describe("cents boundary", () => {
     expect(usd(11845678)).toBe(118456.78);
     expect(formatUsd(11845678)).toBe("118,456.78");
     expect(formatUsd("100")).toBe("1");
+  });
+});
+
+describe("localTimeZoneLabel", () => {
+  it("matches what Intl resolves for the current runtime, not a hardcoded/UTC value", () => {
+    // Resolved once at module load from the process's own TZ (same source browsers use),
+    // so this must agree with asking Intl directly right now — it must never be a literal
+    // like "UTC" baked in regardless of environment.
+    const expected = new Intl.DateTimeFormat(undefined, { timeZoneName: "short" })
+      .formatToParts(new Date())
+      .find((p) => p.type === "timeZoneName")?.value;
+    expect(localTimeZoneLabel).toBe(expected ?? "Local");
+  });
+
+  it("is a non-empty label safe to render directly in the UI", () => {
+    expect(typeof localTimeZoneLabel).toBe("string");
+    expect(localTimeZoneLabel.length).toBeGreaterThan(0);
   });
 });

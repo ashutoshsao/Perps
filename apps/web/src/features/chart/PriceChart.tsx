@@ -4,12 +4,14 @@ import {
   ColorType,
   HistogramSeries,
   LineStyle,
+  TickMarkType,
   createChart,
   type CandlestickData,
   type HistogramData,
   type IChartApi,
   type IPriceLine,
   type ISeriesApi,
+  type Time,
   type UTCTimestamp,
   type WhitespaceData,
 } from "lightweight-charts";
@@ -25,6 +27,39 @@ const INDEX_LINE_COLOR = "#a855f7";
 
 function toTime(bucket: string): UTCTimestamp {
   return Math.floor(new Date(bucket).getTime() / 1000) as UTCTimestamp;
+}
+
+// lightweight-charts treats `Time` as a UTC epoch internally and formats its axis/crosshair
+// with UTC getters by default, regardless of the viewer's timezone. Every other timestamp in
+// the app (fill history, trade blotter, position history — see lib/format.ts:formatTime)
+// resolves to the browser's local timezone via Intl, so override both formatters here to match.
+export function localTickMarkFormatter(time: Time, tickMarkType: TickMarkType): string {
+  const date = new Date((time as number) * 1000);
+  switch (tickMarkType) {
+    case TickMarkType.Year:
+      return date.toLocaleDateString([], { year: "numeric" });
+    case TickMarkType.Month:
+      return date.toLocaleDateString([], { month: "short", year: "2-digit" });
+    case TickMarkType.DayOfMonth:
+      return date.toLocaleDateString([], { month: "short", day: "numeric" });
+    case TickMarkType.TimeWithSeconds:
+      return date.toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    default:
+      return date.toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit" });
+  }
+}
+
+export function localTimeFormatter(time: Time): string {
+  const date = new Date((time as number) * 1000);
+  return date.toLocaleString([], {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
 }
 
 function toCandlestickData(candles: Candle[]): CandlestickData[] {
@@ -151,7 +186,14 @@ export function PriceChart({
         horzLines: { color: GRID },
       },
       rightPriceScale: { borderColor: GRID },
-      timeScale: { borderColor: GRID, timeVisible: true, secondsVisible: false, rightOffset: 5 },
+      timeScale: {
+        borderColor: GRID,
+        timeVisible: true,
+        secondsVisible: false,
+        rightOffset: 5,
+        tickMarkFormatter: localTickMarkFormatter,
+      },
+      localization: { timeFormatter: localTimeFormatter },
       crosshair: { mode: 0 },
       autoSize: true,
     });
