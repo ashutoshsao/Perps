@@ -28,9 +28,9 @@ Result: adding a market never requires touching or restarting `price-feeder`.
 
 ## WSS as a cluster with pub/sub fan-out
 
-`apps/wss` is built to run as a cluster (today's docker-compose runs a single instance, but the fan-out mechanism doesn't assume that): each server would hold a subset of client connections. Reading engine events happens through a Redis consumer group, so each event is picked up by exactly one `wss` instance — that instance republishes it via Redis pub/sub, and every instance (including itself) delivers it to whichever local connections care.
+`apps/wss` runs as a cluster in production (2 replicas on GKE; local docker-compose still runs a single instance): each server holds a subset of client connections. Reading engine events happens through a Redis consumer group, so each event is picked up by exactly one `wss` instance — that instance republishes it via Redis pub/sub, and every instance (including itself) delivers it to whichever local connections care.
 
-This decouples "who received the event" from "who holds the relevant socket," which is what would make the WebSocket layer horizontally scalable without sticky sessions, once run as more than one instance.
+This decouples "who received the event" from "who holds the relevant socket," which is what makes the WebSocket layer horizontally scalable without sticky sessions.
 
 ## Deterministic order/fill IDs derived from the stream entry ID
 
@@ -38,7 +38,7 @@ Order and fill IDs are derived from the Redis stream entry ID that carried the c
 
 This makes replay deterministic. If the engine crashes and reprocesses commands from the last snapshot, IDs generated at process-time would come out different on replay, breaking references (fills → orders, rows already written by `db-poller`). Deriving IDs from stream position means the same command always produces the same ID, first run or tenth.
 
-The same property is what makes `db-poller`'s writes safe to reprocess: it upserts by that same deterministic ID rather than inserting. A redelivered stream message — consumer-group crash, restart, rebalance, anything that causes the same entry to be read twice — overwrites cleanly on the second pass instead of erroring on a duplicate key or writing a duplicate row.
+The same property is what makes `db-poller`'s writes safe to reprocess: orders are upserted by that same deterministic ID, and fills are inserted with the write wrapped to swallow the unique-key error on a repeat ID rather than propagate it. Either way, a redelivered stream message — consumer-group crash, restart, rebalance, a claim reclaiming a message that's still being processed, anything that causes the same entry to be read (or read twice at once) — converges cleanly instead of erroring out and getting stuck retrying forever.
 
 ## Snapshot-to-R2 + stream-ID replay instead of writing every mutation to Postgres
 
@@ -59,3 +59,4 @@ An empty order book doesn't demo or feel real. Bots trading through the actual A
 - There are no fees anywhere in the system. Closing a position now correctly releases margin and settles realized PnL into the user's balance, but `realizedPnl` is pure `(exit - entry) * qty` — gross, not net of any fee.
 - Money columns (`realizedPnl`, `marginReleased`, etc.) are `Int` cents, same convention as the rest of the schema, which caps them around $21.4M — flagged, not fixed.
 - `apps/web` is an active work in progress, not a finished client.
+- `db-poller` runs as a single replica (the ops repo pins it to `replicas: 1` specifically to remove cross-consumer event reordering — two readers on the same group can finish out-of-order DB writes for adjacent events, and since writes apply absolute snapshot values rather than deltas, a stale write landing after a newer one wouldn't self-correct). `wss` still runs 2 replicas on the pre-hardening consumer loop (30s claim interval, no same-message concurrency guard), so it can still double-publish or reorder pub/sub messages across replicas — lower stakes than a DB write since it's not persisted, but a live-book UI glitch, not yet fixed to match `db-poller`.
