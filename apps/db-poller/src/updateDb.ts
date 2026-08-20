@@ -1,5 +1,5 @@
 import { CancelOrderResponse, CreateOrderResponse, FundingRateResponse, UpdateIndexPriceResponse } from "@repo/types"
-import { insertFill, prisma } from "@repo/db"
+import { insertFill, prisma, Prisma } from "@repo/db"
 
 async function persistCreateOrderEvent(data: CreateOrderResponse) {
   const { order, makerOrders } = data as CreateOrderResponse
@@ -49,10 +49,8 @@ async function persistCreateOrderEvent(data: CreateOrderResponse) {
   }
 
   for (const fill of order.fills) {
-    const existing = await prisma.fill.findUnique({ where: { id: fill.fillId } })
-
-    if (!existing) {
-      await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx) => {
+      try {
         await tx.fill.create({
           data: {
             id: fill.fillId,
@@ -65,19 +63,23 @@ async function persistCreateOrderEvent(data: CreateOrderResponse) {
             marketId: order.marketId,
           }
         })
+      } catch (err) {
+        // concurrent/replayed delivery of the same event already recorded this fill
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") return
+        throw err
+      }
 
-        const makerOrder = makerOrders.find((order) => order.orderId === fill.makerOrderId)
-        if (makerOrder) {
-          await tx.order.update({
-            where: { id: fill.makerOrderId },
-            data: {
-              filledQty: makerOrder.filledQty,
-              status: makerOrder.status,
-            }
-          })
-        }
-      })
-    }
+      const makerOrder = makerOrders.find((order) => order.orderId === fill.makerOrderId)
+      if (makerOrder) {
+        await tx.order.update({
+          where: { id: fill.makerOrderId },
+          data: {
+            filledQty: makerOrder.filledQty,
+            status: makerOrder.status,
+          }
+        })
+      }
+    })
 
     await insertFill(
       fill.fillId,

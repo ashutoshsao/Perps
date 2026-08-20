@@ -7,22 +7,35 @@ const readRedis = getRedisClient();
 const DB_EVENTS = new Set(["update_index_price", "funding_rate", "create_order", "cancel_order"]);
 const GROUP = "db-poller"
 const CONSUMER = `dbPoller-${crypto.randomUUID()}`
-const CLAIM_IDLE_MS = 30_000
+const CLAIM_IDLE_MS = 120_000
+
+// claimStale runs on its own timer independent of the read loop, so a slow
+// write can otherwise get reclaimed and reprocessed while the original
+// handleMessage call for the same id is still in flight — this guards against
+// that concurrent double-processing.
+const inFlight = new Set<string>();
 
 async function handleMessage(client: Awaited<typeof readRedis>, id: string, message: Record<string, string>) {
-  const { type, ok, data } = message
-
-  if (!DB_EVENTS.has(type) || ok !== 'true') {
-    await client.xAck(REDIS_KEYS.engineEvents, GROUP, id)
-    return
-  }
+  if (inFlight.has(id)) return
+  inFlight.add(id)
 
   try {
-    await updateDb(type, data ? JSON.parse(data) : undefined)
-    await client.xAck(REDIS_KEYS.engineEvents, GROUP, id)
-  } catch (err) {
-    console.error("DB write failed:", err)
-    // don't ack — message stays pending, will be reclaimed by claimStale
+    const { type, ok, data } = message
+
+    if (!DB_EVENTS.has(type) || ok !== 'true') {
+      await client.xAck(REDIS_KEYS.engineEvents, GROUP, id)
+      return
+    }
+
+    try {
+      await updateDb(type, data ? JSON.parse(data) : undefined)
+      await client.xAck(REDIS_KEYS.engineEvents, GROUP, id)
+    } catch (err) {
+      console.error("DB write failed:", err)
+      // don't ack — message stays pending, will be reclaimed by claimStale
+    }
+  } finally {
+    inFlight.delete(id)
   }
 }
 

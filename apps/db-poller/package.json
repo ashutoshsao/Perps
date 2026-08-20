@@ -7,7 +7,8 @@
   "license": "MIT",
   "scripts": {
     "lint": "eslint \"**/*.ts\"",
-    "dev": "bun index.ts"
+    "dev": "bun index.ts",
+    "test": "bun test"
   },
   "devDependencies": {
     "@repo/eslint-config": "*",
