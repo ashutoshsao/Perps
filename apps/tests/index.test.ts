@@ -1461,7 +1461,7 @@ describe("updatePosition", () => {
     const flipped = POSITIONS.get(userId)!.get(symbol)!;
     expect(flipped.positionSide).toBe("long");
     expect(flipped.qty).toBe(5); // remaining 15 - 10
-    expect(flipped.margin).toBe(135);
+    expect(flipped.margin).toBe(45); // scaled to the 5 remaining qty, not the full 15-qty fillMargin
     expect(flipped.openedAt).toBe(4000);
   });
 

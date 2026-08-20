@@ -6,6 +6,22 @@ import { updatePosition } from "../helper/updatePosition";
 import { getDepthDiff } from "../helper/getDepthDiff";
 
 export function createOrder(payload: createOrderPayload, streamMsgId: string, orderIdSuffix: string = "taker") {
+  const orderId = `${streamMsgId}-${orderIdSuffix}`;
+
+  // replayed stream message (e.g. engine restarted from a stale snapshot and
+  // is re-reading commands it already applied) — return the already-computed
+  // result instead of debiting margin and matching a second time
+  const alreadyProcessed = ORDERS.get(orderId);
+  if (alreadyProcessed) {
+    return {
+      order: alreadyProcessed,
+      fills: alreadyProcessed.fills,
+      makerOrders: alreadyProcessed.fills.map(f => ORDERS.get(f.makerOrderId)).filter((o): o is OrderRecord => o !== undefined),
+      depthDiff: getDepthDiff(alreadyProcessed.symbol, [], []),
+      closedPositions: undefined,
+    }
+  }
+
   const { userId, symbol, side, orderType, leverage, qty } = payload;
 
   let orderbook = ORDERBOOKS.get(symbol);
@@ -46,7 +62,7 @@ export function createOrder(payload: createOrderPayload, streamMsgId: string, or
   usdBalance.locked += margin;
 
   const order: OrderRecord = {
-    orderId: `${streamMsgId}-${orderIdSuffix}`,
+    orderId,
     marketId: market.marketId,
     userId,
     side,
