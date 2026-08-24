@@ -60,8 +60,8 @@ Trading and account:
 - `POST /market`
 - `POST /order`
 - `DELETE /order/:id`
-- `GET /orders`
-- `GET /fills`
+- `GET /orders?limit=&cursor=`
+- `GET /fills?limit=&cursor=`
 - `GET /balance`
 
 Public market data:

@@ -52,6 +52,23 @@ Persisting every mutation synchronously to Postgres would put a DB round-trip in
 
 An empty order book doesn't demo or feel real. Bots trading through the actual API make the exchange look live without real users, and exercise matching/margin/liquidation continuously instead of only in tests.
 
+## Candles served from continuous aggregates, not raw-tick bucketing
+
+`GET /klines` used to run `time_bucket()` over raw `fills_ts` on every request — a full re-aggregation of raw ticks each time a chart loads. The continuous aggregates (`candles_1m` through `candles_1d`) already existed in the schema and were refreshing correctly; the API just wasn't reading from them. `getKLines` now selects straight from the matching materialized view instead. Real-time aggregation (on by default) still folds in the current in-progress bucket, so there's no gap at the "now" edge — the query just got cheaper and stopped depending on however much raw history happens to still be on disk.
+
+## Bounded retention: raw ticks and terminal trade history get archived to R2, not kept forever
+
+The `fills_ts` raw-tick table and the `Order`/`Fill`/`ClosedPosition` tables had no retention policy — every row, forever, on a small PVC. `Order` alone reached 1.48M rows and ~350k/day of new rows (market-maker churn, ~75% already `cancelled`), and turned out to be the actual majority of disk usage — not the timeseries data, which is what a growth investigation would naively suspect first.
+
+Two daily CronJobs (`ops/perps-app-k8s/14-timescaleArchiveCronjob.yml`, `15-tradeHistoryArchiveCronjob.yml`) export aging rows to R2 as gzip'd CSV, then purge them from Postgres:
+
+- `fills_ts`: compressed after 12h (`timescaledb.compress` + `add_compression_policy`), archived and `drop_chunks`'d after 3 days. Safe because only `candles_1m`'s continuous-aggregate refresh policy reads raw ticks (1h lookback) — everything coarser cascades from `candles_1m`/`5m`/etc, not from raw data, so dropping old raw chunks never touches already-materialized candles.
+- `Order`/`Fill`/`ClosedPosition`: archived and purged after 30 days. `Fill` has `RESTRICT` FKs to `Order` on both `makerOrderId`/`takerOrderId`, so purge order matters — `Fill` rows are only eligible once *both* linked orders are terminal (`filled`/`cancelled`) and past the window, and `Order` rows are only eligible once no remaining `Fill` references them. Both run as one continuous `psql` session — temp tables computing eligibility don't survive across separate `psql` invocations, a bug caught before shipping — and delete in batches of 5000 to avoid one long lock on a live table.
+
+Archives land in a separate `perps-archive-data` R2 bucket, not `perps-db-backups` — that bucket is a restore-from-disaster rolling snapshot (14-count retention), a different lifecycle than a long-term historical record. The R2 free tier's 10GB cap is account-wide across all buckets, so the archive bucket still needs its own bound: each CronJob prunes its own prefix to a 180-day rolling window after upload, same `aws s3 ls | ... | aws s3 rm` idiom the existing backup jobs use, just age-based instead of count-based.
+
+`getUserOrders`/`getUserFills` also went from unbounded `findMany` (returned a user's entire history, every call, growing every day) to cursor-paginated, matching the pattern `getPositionHistory` already used — a correctness bug independent of the archival work above.
+
 ## Current known gaps
 
 - Single-process engine — no horizontal scaling story yet.
