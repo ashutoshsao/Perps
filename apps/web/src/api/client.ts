@@ -89,11 +89,11 @@ export const api = {
   addBalance(token: string, amount: number) {
     return request<{ response: Balance }>("/onramp", { method: "POST", token, body: { amount } });
   },
-  getOrders(token: string) {
-    return request<{ orders: UserOrder[] }>("/orders", { token });
+  getOrders(token: string, limit = 200) {
+    return request<{ orders: UserOrder[]; nextCursor: string | null }>(`/orders?limit=${limit}`, { token });
   },
-  getFills(token: string) {
-    return request<{ fills: UserFill[] }>("/fills", { token });
+  getFills(token: string, limit = 200) {
+    return request<{ fills: UserFill[]; nextCursor: string | null }>(`/fills?limit=${limit}`, { token });
   },
   placeOrder(token: string, payload: OrderPayload) {
     return request<OrderMutationResponse>("/order", { method: "POST", token, body: payload });

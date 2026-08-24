@@ -66,6 +66,16 @@ export const getKLinesApiSchema = z.object({
   limit: z.coerce.number().int().min(1).max(1000).default(200),
 })
 
+export const getUserOrdersApiSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(200),
+  cursor: z.string().optional(),
+})
+
+export const getUserFillsApiSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(200),
+  cursor: z.string().optional(),
+})
+
 export const getFundingHistoryApiSchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
   cursor: z.string().optional(),

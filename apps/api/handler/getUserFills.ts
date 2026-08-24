@@ -1,10 +1,18 @@
+import { getUserFillsApiSchema } from "@repo/types";
 import { prisma } from "@repo/db";
 import { Request, Response } from "express";
 
 export async function getUserFills(req: Request, res: Response) {
   const userId = req.userId!;
+  const parsed = getUserFillsApiSchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid inputs" })
+    return
+  }
+  const { limit, cursor } = parsed.data;
+
   try {
-    const fills = await prisma.fill.findMany({
+    const rows = await prisma.fill.findMany({
       where: {
         OR: [
           { takerUserId: userId },
@@ -19,8 +27,13 @@ export async function getUserFills(req: Request, res: Response) {
           }
         }
       },
-      orderBy: { createdAt: "desc" }
+      orderBy: { createdAt: "desc" },
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     })
+
+    const hasMore = rows.length > limit;
+    const fills = hasMore ? rows.slice(0, limit) : rows;
 
     const userFills = fills.map((fill) => {
       const makerSide = fill.makerOrder.side;
@@ -43,7 +56,10 @@ export async function getUserFills(req: Request, res: Response) {
       };
     });
 
-    res.status(200).json({ fills: userFills })
+    res.status(200).json({
+      fills: userFills,
+      nextCursor: hasMore ? fills[fills.length - 1]!.id : null,
+    })
   } catch (error) {
     res.status(500).json({ error: (error as Error).message })
   }
