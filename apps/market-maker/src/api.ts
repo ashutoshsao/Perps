@@ -98,8 +98,21 @@ export const api = {
   cancelOrder: (auth: BotAuth, orderId: string) =>
     request(`/order/${orderId}`, { method: "DELETE", token: auth.token }),
 
-  openOrders: (auth: BotAuth) =>
-    request<{ orders: { id: string; status: string }[] }>("/orders", { token: auth.token }).then((r) =>
-      r.orders.filter((o) => o.status === "open" || o.status === "partially_filled"),
+  ordersPage: (auth: BotAuth, cursor?: string) =>
+    request<{ orders: { id: string; status: string }[]; nextCursor: string | null }>(
+      `/orders?limit=200${cursor ? `&cursor=${cursor}` : ""}`,
+      { token: auth.token },
     ),
+
+  /** walks every page — a single page (200) isn't enough to find all open orders once the count exceeds that */
+  openOrders: async (auth: BotAuth) => {
+    const open: { id: string; status: string }[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await api.ordersPage(auth, cursor);
+      open.push(...page.orders.filter((o) => o.status === "open" || o.status === "partially_filled"));
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    return open;
+  },
 };

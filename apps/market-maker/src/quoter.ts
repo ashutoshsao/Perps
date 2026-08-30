@@ -37,8 +37,18 @@ export async function runQuoter(auth: BotAuth, feed: IndexFeed, spec: MarketSpec
       const drifted = lastMid === 0 || Math.abs(mid - lastMid) / lastMid >= REQUOTE_DRIFT;
       if (!drifted && ticksSinceQuote < FORCE_REQUOTE_TICKS) continue;
 
-      await Promise.allSettled(tracked.map((orderId) => api.cancelOrder(auth, orderId)));
-      tracked = [];
+      // a cancel that fails for any reason other than "already terminal" (400) must not
+      // be dropped from tracking — otherwise it orphans a resting order in the engine's
+      // book forever, since nothing else will ever try to cancel it again
+      const cancelResults = await Promise.allSettled(tracked.map((orderId) => api.cancelOrder(auth, orderId)));
+      const stillResting: string[] = [];
+      cancelResults.forEach((result, i) => {
+        if (result.status === "rejected" && !(result.reason instanceof ApiError && result.reason.status === 400)) {
+          stillResting.push(tracked[i]!);
+        }
+      });
+      if (stillResting.length > 0) log(tag, `${stillResting.length} cancel(s) failed, retrying next tick`);
+      tracked = stillResting;
 
       for (const quote of buildLadder(mid, spec)) {
         try {
@@ -70,9 +80,8 @@ export async function runQuoter(auth: BotAuth, feed: IndexFeed, spec: MarketSpec
 export async function cancelStaleOrders(auth: BotAuth, tag: string) {
   try {
     const open = await api.openOrders(auth);
-    const stale = open.slice(0, 300);
-    await Promise.allSettled(stale.map((order) => api.cancelOrder(auth, order.id)));
-    if (stale.length > 0) log(tag, `cancelled ${stale.length} stale orders`);
+    await Promise.allSettled(open.map((order) => api.cancelOrder(auth, order.id)));
+    if (open.length > 0) log(tag, `cancelled ${open.length} stale orders`);
   } catch (err) {
     log(tag, `stale-order cleanup failed: ${(err as Error).message}`);
   }
