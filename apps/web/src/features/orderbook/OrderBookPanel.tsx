@@ -58,11 +58,10 @@ function Row({
 
   return (
     <motion.button
-      layout="position"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ layout: BAR_TRANSITION, opacity: { duration: 0.15 } }}
+      transition={{ opacity: { duration: 0.15 } }}
       type="button"
       onClick={onClick}
       className="relative grid w-full grid-cols-3 px-3 py-[3px] text-left text-[12px] hover:bg-surface"
@@ -326,16 +325,26 @@ export function OrderBookPanel({
               </AnimatePresence>
             </div>
 
-            <div className="flex h-6 shrink-0 text-[11px] font-semibold">
+            <div className="relative h-6 shrink-0 overflow-hidden text-[11px] font-semibold">
+              {/* plain rectangle underneath — the diagonal seam comes entirely from the
+                  red slice's clip-path overlapping it, so green never needs its own clip */}
               <motion.div
-                className="flex items-center bg-green pl-2 text-black/80"
+                className="absolute inset-y-0 left-0 flex items-center bg-green pl-2 text-black/80"
                 initial={false}
                 animate={{ width: `${buyRatio}%` }}
                 transition={BAR_TRANSITION}
               >
                 {buyRatio}%
               </motion.div>
-              <div className="flex flex-1 items-center justify-end bg-red pr-2 text-white">{sellRatio}%</div>
+              <motion.div
+                className="absolute inset-y-0 right-0 flex items-center justify-end bg-red pr-2 text-white"
+                style={{ clipPath: "polygon(12px 0, 100% 0, 100% 100%, 0 100%)" }}
+                initial={false}
+                animate={{ width: `calc(${sellRatio}% + 12px)` }}
+                transition={BAR_TRANSITION}
+              >
+                {sellRatio}%
+              </motion.div>
             </div>
           </div>
         )
