@@ -18,7 +18,7 @@ function tradeKey(trade: Trade) {
   return `${trade.time}:${trade.symbol}:${trade.price}:${trade.qty}:${trade.side}`;
 }
 
-function mergeTrades(liveTrades: Trade[], snapshotTrades: Trade[]) {
+function mergeTrades(liveTrades: Trade[], snapshotTrades: Trade[], cap?: number) {
   const seen = new Set<string>();
   const merged: Trade[] = [];
 
@@ -27,7 +27,7 @@ function mergeTrades(liveTrades: Trade[], snapshotTrades: Trade[]) {
     if (seen.has(key)) continue;
     seen.add(key);
     merged.push(trade);
-    if (merged.length >= MAX_TRADES) break;
+    if (cap != null && merged.length >= cap) break;
   }
 
   return merged;
@@ -48,6 +48,9 @@ export function useLiveTrades(symbol: string | null, snapshotTrades: Trade[]) {
     const subscription = subscribeChannel<TradeUpdate>(`market:${symbol}:trade`, (update) => {
       if (update.symbol !== symbol) return;
       const trade = toTrade(update);
+      // uncapped — useLiveCandles rebuilds the whole candle series from this array on
+      // every change, so capping it here silently drops older candle buckets once trade
+      // volume exceeds the cap. Only the rendered trade list below needs a display cap.
       setLiveTrades((current) => mergeTrades([trade, ...current], []));
     }, {
       onOpen() {
@@ -66,7 +69,7 @@ export function useLiveTrades(symbol: string | null, snapshotTrades: Trade[]) {
     return () => subscription.unsubscribe();
   }, [symbol]);
 
-  const trades = useMemo(() => mergeTrades(liveTrades, snapshotTrades), [liveTrades, snapshotTrades]);
+  const trades = useMemo(() => mergeTrades(liveTrades, snapshotTrades, MAX_TRADES), [liveTrades, snapshotTrades]);
 
   return { trades, liveTrades, isLive, error };
 }

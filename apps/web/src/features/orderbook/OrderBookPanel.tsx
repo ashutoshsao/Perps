@@ -280,7 +280,7 @@ export function OrderBookPanel({
 
             <div
               ref={scrollContainerRef}
-              className="flex min-h-0 flex-1 flex-col overflow-y-auto [justify-content:safe_center]"
+              className="flex min-h-0 flex-1 flex-col justify-start overflow-y-auto"
               style={{ overflowAnchor: "none" }}
             >
               <AnimatePresence initial={false}>
