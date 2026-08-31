@@ -46,17 +46,27 @@ export function TradingProvider({ children }: { children: ReactNode }) {
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
   }, []);
 
+  // Candle/trade objects don't carry a symbol field, and useAsyncData deliberately keeps
+  // showing the previous fetch's data while a new one is in flight (desirable for e.g. an
+  // interval switch or the visibility refetch above, which refetch the *same* symbol). But
+  // that means right after switching markets, the live trade feed (which resets and starts
+  // receiving the new symbol's trades immediately) can get merged against the *old* symbol's
+  // still-in-flight REST snapshot, producing candles that mix both markets' prices. Tag each
+  // fetch with the symbol it was actually for so a mismatch can be treated as "not loaded yet"
+  // instead of merged.
   const tradesState = useAsyncData(
-    () => (symbol ? api.getTrades(symbol) : Promise.resolve({ trades: [] })),
+    () => (symbol ? api.getTrades(symbol).then((r) => ({ ...r, symbol })) : Promise.resolve({ trades: [], symbol })),
     [symbol, refreshTick],
   );
-  const liveTrades = useLiveTrades(symbol || null, tradesState.data?.trades ?? []);
+  const tradesForSymbol = tradesState.data?.symbol === symbol ? tradesState.data?.trades ?? [] : [];
+  const liveTrades = useLiveTrades(symbol || null, tradesForSymbol);
 
   const klinesState = useAsyncData(
-    () => (symbol ? api.getKlines(symbol, chartInterval) : Promise.resolve({ candles: [] })),
+    () => (symbol ? api.getKlines(symbol, chartInterval).then((r) => ({ ...r, symbol })) : Promise.resolve({ candles: [], symbol })),
     [symbol, chartInterval, refreshTick],
   );
-  const candles = useLiveCandles(klinesState.data?.candles ?? [], liveTrades.liveTrades, chartInterval);
+  const candlesForSymbol = klinesState.data?.symbol === symbol ? klinesState.data?.candles ?? [] : [];
+  const candles = useLiveCandles(candlesForSymbol, liveTrades.liveTrades, chartInterval);
 
   return (
     <TradingContext.Provider
