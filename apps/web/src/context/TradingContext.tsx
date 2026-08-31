@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { api } from "../api/client";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { useDepthSync } from "../hooks/useDepthSync";
@@ -34,15 +34,27 @@ export function TradingProvider({ children }: { children: ReactNode }) {
   const bestBid = depthSync.depth?.bids[0]?.[0] ?? null;
   const bestAsk = depthSync.depth?.asks[0]?.[0] ?? null;
 
+  // a backgrounded tab can throttle timers enough that the WS misses trades outright
+  // (not just delays them) — the live-trade merge has nothing to backfill from in that
+  // case, so re-pull the REST snapshot whenever the tab regains focus to close the gap
+  const [refreshTick, setRefreshTick] = useState(0);
+  useEffect(() => {
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible") setRefreshTick((t) => t + 1);
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, []);
+
   const tradesState = useAsyncData(
     () => (symbol ? api.getTrades(symbol) : Promise.resolve({ trades: [] })),
-    [symbol],
+    [symbol, refreshTick],
   );
   const liveTrades = useLiveTrades(symbol || null, tradesState.data?.trades ?? []);
 
   const klinesState = useAsyncData(
     () => (symbol ? api.getKlines(symbol, chartInterval) : Promise.resolve({ candles: [] })),
-    [symbol, chartInterval],
+    [symbol, chartInterval, refreshTick],
   );
   const candles = useLiveCandles(klinesState.data?.candles ?? [], liveTrades.liveTrades, chartInterval);
 

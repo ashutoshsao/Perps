@@ -9,6 +9,11 @@ export async function getTicker(req: Request, res: Response) {
   }
 
   try {
+    // candles_1m reads directly off raw fills_ts (one hop, real-time aggregation applies) so
+    // it's never more than a few seconds stale. candles_1h is a 4-hop cascade (1h <- 15m <- 5m
+    // <- 1m <- fills_ts) refreshed only once an hour with its own 1h end_offset lag on top —
+    // right after any market restart/recreation it can have zero rows for a symbol until that
+    // chain catches up, which is exactly what was causing this 404.
     const result = await timescale.query(
       `SELECT
         first(open,   bucket) AS open,
@@ -16,7 +21,7 @@ export async function getTicker(req: Request, res: Response) {
         min(low)              AS low,
         last(close,   bucket) AS close,
         sum(volume)           AS volume
-       FROM candles_1h
+       FROM candles_1m
        WHERE symbol = $1
          AND bucket >= NOW() - INTERVAL '24 hours'`,
       [symbol]

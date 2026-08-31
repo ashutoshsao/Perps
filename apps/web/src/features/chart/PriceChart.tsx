@@ -128,6 +128,12 @@ const RANGE_SECONDS: Record<string, number | null> = {
   "1d": 86400,
 };
 
+function bucketsMatch(a: Candle[], b: Candle[]) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i]!.bucket !== b[i]!.bucket) return false;
+  return true;
+}
+
 // only called on initial load / explicit range change, never on a routine candle tick
 function applyVisibleRange(chart: IChartApi | null, candles: Candle[], range: string) {
   if (!chart || candles.length === 0) return;
@@ -167,6 +173,8 @@ export function PriceChart({
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const candlesRef = useRef(candles);
   candlesRef.current = candles;
+  const prevCandlesRef = useRef<Candle[]>([]);
+  const prevShowVolumeRef = useRef(showVolume);
   const dataReadyRef = useRef(false);
   const priceLineRef = useRef<IPriceLine | null>(null);
 
@@ -227,9 +235,39 @@ export function PriceChart({
   }, []);
 
   useEffect(() => {
-    const intervalSeconds = INTERVAL_SECONDS[interval] ?? 60;
-    candleSeriesRef.current?.setData(padWithWhitespace(toCandlestickData(candles), intervalSeconds));
-    volumeSeriesRef.current?.setData(showVolume ? toVolumeData(candles) : []);
+    const prev = prevCandlesRef.current;
+    const volumeToggled = prevShowVolumeRef.current !== showVolume;
+    prevShowVolumeRef.current = showVolume;
+
+    // repeatedly calling setData() (a full series replace) on every routine trade tick
+    // makes lightweight-charts recompute its viewport from scratch each time, which is
+    // what caused the whole visible range to visibly drift/shift on live updates. Use
+    // the incremental update() API for the two routine cases — the last bucket's OHLCV
+    // changed, or exactly one new bucket appended after unchanged history — and reserve
+    // setData() for genuine structural changes (initial load, symbol/interval switch, or
+    // a visibility-refetch that can inject different/earlier history).
+    const sameBucketUpdated =
+      !volumeToggled &&
+      candles.length > 0 &&
+      candles.length === prev.length &&
+      bucketsMatch(candles.slice(0, -1), prev.slice(0, -1)) &&
+      candles[candles.length - 1]!.bucket === prev[prev.length - 1]?.bucket;
+    const newBucketAppended =
+      !volumeToggled &&
+      prev.length > 0 &&
+      candles.length === prev.length + 1 &&
+      bucketsMatch(candles.slice(0, -1), prev);
+
+    if (sameBucketUpdated || newBucketAppended) {
+      const bar = candles[candles.length - 1]!;
+      candleSeriesRef.current?.update(toCandlestickData([bar])[0]!);
+      if (showVolume) volumeSeriesRef.current?.update(toVolumeData([bar])[0]!);
+    } else {
+      const intervalSeconds = INTERVAL_SECONDS[interval] ?? 60;
+      candleSeriesRef.current?.setData(padWithWhitespace(toCandlestickData(candles), intervalSeconds));
+      volumeSeriesRef.current?.setData(showVolume ? toVolumeData(candles) : []);
+    }
+    prevCandlesRef.current = candles;
 
     if (candles.length === 0) {
       // symbol switched (or still loading) — re-fit once real data lands again
