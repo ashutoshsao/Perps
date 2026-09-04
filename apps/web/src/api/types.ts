@@ -182,6 +182,7 @@ export type UserFill = {
 
 export type AuthResponse = {
   token: string;
+  refreshToken: string;
 };
 
 export type FundingInfo = {

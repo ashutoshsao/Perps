@@ -1,9 +1,8 @@
 import type { Request, Response } from "express";
 import { prisma } from "@repo/db";
 import argon2 from "argon2";
-import jwt from "jsonwebtoken";
-import { Env } from "../utils/config";
 import { SigninApiSchema, SignupApiSchema } from "@repo/types";
+import { createAccessToken, createRefreshToken, RefreshTokenError, revokeRefreshToken, rotateAccessToken } from "../helper/token";
 
 export const signup = async (req: Request, res: Response) => {
   const parsed = SignupApiSchema.safeParse(req.body);
@@ -39,12 +38,12 @@ export const signup = async (req: Request, res: Response) => {
     }
   })
 
-  const token = jwt.sign({
-    userId: user.id
-  }, Env.JWT_SECRET);
+  const token = createAccessToken(user.id);
+  const refreshToken = await createRefreshToken(user.id);
 
   res.status(201).json({
-    token
+    token,
+    refreshToken
   });
 }
 
@@ -81,11 +80,38 @@ export const signin = async (req: Request, res: Response) => {
     return
   }
 
-  const token = jwt.sign({
-    userId: existingUser.id
-  }, Env.JWT_SECRET);
+  const token = createAccessToken(existingUser.id);
+  const refreshToken = await createRefreshToken(existingUser.id);
 
   res.status(200).json({
-    token
+    token,
+    refreshToken
   })
+}
+
+export const refresh = async (req: Request, res: Response) => {
+  const { refreshToken } = req.body ?? {};
+  if (!refreshToken || typeof refreshToken !== "string") {
+    res.status(400).json({ message: "Invalid refresh token" })
+    return
+  }
+
+  try {
+    const token = await rotateAccessToken(refreshToken);
+    res.status(200).json({ token })
+  } catch (error) {
+    if (error instanceof RefreshTokenError) {
+      res.status(401).json({ message: error.message })
+      return
+    }
+    throw error
+  }
+}
+
+export const logout = async (req: Request, res: Response) => {
+  const { refreshToken } = req.body ?? {};
+  if (refreshToken && typeof refreshToken === "string") {
+    await revokeRefreshToken(refreshToken);
+  }
+  res.status(200).json({ message: "Logged out" })
 }

@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import jwt from "jsonwebtoken";
+import { prisma } from "@repo/db";
 import type { EngineCommandType, EngineRequest, PositionClose } from "@repo/types";
 import { handleCommand } from "../engine/src/controller/engine.controller";
 import { updatePosition } from "../engine/src/helper/updatePosition";
@@ -16,6 +18,7 @@ const requiredEnv = ["DATABASE_URL", "REDIS_URL"] as const;
 let username = "";
 let password = "";
 let authToken = "";
+let refreshToken = "";
 let marketSymbol = "";
 let apiRestingOrderId = "";
 
@@ -271,6 +274,7 @@ describe("api integration", () => {
 
       expect(response.status).toBe(201);
       expect(json.token).toBeString();
+      expect(json.refreshToken).toBeString();
     });
 
     it("rejects signin without a username", async () => {
@@ -291,7 +295,63 @@ describe("api integration", () => {
 
       expect(response.status).toBe(200);
       expect(json.token).toBeString();
+      expect(json.refreshToken).toBeString();
       authToken = json.token;
+      refreshToken = json.refreshToken;
+    });
+
+    it("rejects an expired access token with a TOKEN_EXPIRED code", async () => {
+      const secret = process.env.JWT_SECRET ?? "test-jwt-secret";
+      const expiredToken = jwt.sign({ userId: crypto.randomUUID() }, secret, { expiresIn: "-10s" });
+
+      const { response, json } = await get("/balance", { authorization: `Bearer ${expiredToken}` });
+
+      expect(response.status).toBe(401);
+      expect(json.code).toBe("TOKEN_EXPIRED");
+    });
+
+    it("exchanges a refresh token for a new working access token", async () => {
+      const { response, json } = await post("/refresh", { refreshToken });
+
+      expect(response.status).toBe(200);
+      expect(json.token).toBeString();
+
+      const balance = await get("/balance", { authorization: `Bearer ${json.token}` });
+      expect(balance.response.status).toBe(200);
+    });
+
+    it("rejects an unknown refresh token", async () => {
+      const { response } = await post("/refresh", { refreshToken: "not-a-real-refresh-token" });
+      expect(response.status).toBe(401);
+    });
+
+    it("rejects a refresh token whose account was deleted — the bug this whole flow exists to close", async () => {
+      const throwawayUsername = `throwaway-${crypto.randomUUID()}@example.com`;
+      const signup = await post("/signup", {
+        name: "Throwaway",
+        username: throwawayUsername,
+        password: "password-123",
+      });
+      expect(signup.response.status).toBe(201);
+      const throwawayRefreshToken = signup.json.refreshToken as string;
+
+      await prisma.user.delete({ where: { username: throwawayUsername } });
+
+      const { response } = await post("/refresh", { refreshToken: throwawayRefreshToken });
+      expect(response.status).toBe(401);
+    });
+
+    it("logout revokes the refresh token", async () => {
+      const loggedOut = await post("/logout", { refreshToken });
+      expect(loggedOut.response.status).toBe(200);
+
+      const { response } = await post("/refresh", { refreshToken });
+      expect(response.status).toBe(401);
+
+      // re-signin so the rest of the suite still has a live token/refreshToken pair
+      const signin = await post("/signin", { username, password });
+      authToken = signin.json.token;
+      refreshToken = signin.json.refreshToken;
     });
   });
 
@@ -448,8 +508,32 @@ describe("api integration", () => {
         );
       }
 
-      const from = base - 60_000;
+      // candles_1d buckets align to UTC midnight, which for `base` (10:00 UTC)
+      // falls nearly 10 hours before it — from must reach back past that
+      // midnight or the WHERE clause silently excludes the whole day's candle
+      const from = base - 24 * 60 * 60_000;
       const to = base + 25 * 60 * 60_000;
+
+      // continuous aggregates only materialize via their background refresh
+      // policy, which only looks at a window recent relative to real NOW() (1
+      // hour for candles_1m, up to 7 days for candles_1d) — this fixture uses a
+      // fixed historical timestamp that eventually ages out of every one of
+      // those windows, so refresh synchronously instead of relying on the
+      // policy. Bounded (not NULL/NULL) so it stays cheap and doesn't
+      // lock-contend with the real background policy on this shared dev
+      // database, but padded well beyond `from`/`to` since Timescale requires
+      // a refresh window to span at least one full bucket — the coarsest
+      // being candles_1d's 1-day bucket, which the ~25h [from, to] span alone
+      // isn't reliably wide enough to guarantee. Order matters: each aggregate
+      // is built from the one before it (1m -> 5m -> 15m -> 1h -> 4h -> 1d).
+      const refreshFrom = base - 3 * 24 * 60 * 60_000;
+      const refreshTo = base + 3 * 24 * 60 * 60_000;
+      for (const view of ["candles_1m", "candles_5m", "candles_15m", "candles_1h", "candles_4h", "candles_1d"]) {
+        await timescale.query(
+          `CALL refresh_continuous_aggregate($1::regclass, $2::timestamptz, $3::timestamptz)`,
+          [view, new Date(refreshFrom), new Date(refreshTo)],
+        );
+      }
       const klinesPath = (interval: string) => `/klines/${symbol}?interval=${interval}&from=${from}&to=${to}`;
 
       const oneMinute = await get(klinesPath("1m"));

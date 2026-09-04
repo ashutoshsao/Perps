@@ -1,7 +1,7 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api } from "../api/client";
 import { decodeUserId } from "../hooks/useLiveAccount";
-import { AUTH_TOKEN_KEY, AUTH_USERNAME_KEY } from "../lib/constants";
+import { clearSession, getAccessToken, getRefreshToken, getUsername, setSession, subscribe } from "../api/session";
 
 type AuthMode = "login" | "signup";
 
@@ -14,17 +14,24 @@ type AuthContextValue = {
   openAuthModal: (mode: AuthMode) => void;
   closeAuthModal: () => void;
   login: (username: string, password: string) => Promise<void>;
-  signup: (name: string, username: string, password: string) => Promise<{ token: string }>;
+  signup: (name: string, username: string, password: string) => Promise<{ token: string; refreshToken: string }>;
   logout: () => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(() => window.localStorage.getItem(AUTH_TOKEN_KEY));
-  const [username, setUsername] = useState<string | null>(() => window.localStorage.getItem(AUTH_USERNAME_KEY));
+  const [token, setToken] = useState<string | null>(() => getAccessToken());
+  const [username, setUsername] = useState<string | null>(() => getUsername());
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<AuthMode>("login");
+
+  // picks up token refreshes from client.ts's silent-refresh, which runs
+  // outside React and updates the session store directly
+  useEffect(() => subscribe(() => {
+    setToken(getAccessToken());
+    setUsername(getUsername());
+  }), []);
 
   const openAuthModal = (mode: AuthMode) => {
     setModalMode(mode);
@@ -32,30 +39,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
   const closeAuthModal = () => setModalOpen(false);
 
-  function applyAuth(nextToken: string, nextUsername: string) {
+  function applyAuth(nextToken: string, nextRefreshToken: string, nextUsername: string) {
+    setSession(nextToken, nextRefreshToken, nextUsername);
     setToken(nextToken);
     setUsername(nextUsername);
-    window.localStorage.setItem(AUTH_TOKEN_KEY, nextToken);
-    window.localStorage.setItem(AUTH_USERNAME_KEY, nextUsername);
     setModalOpen(false);
   }
 
   async function login(loginUsername: string, password: string) {
     const response = await api.signin({ username: loginUsername, password });
-    applyAuth(response.token, loginUsername);
+    applyAuth(response.token, response.refreshToken, loginUsername);
   }
 
   async function signup(name: string, signupUsername: string, password: string) {
     const response = await api.signup({ name, username: signupUsername, password });
-    applyAuth(response.token, signupUsername);
+    applyAuth(response.token, response.refreshToken, signupUsername);
     return response;
   }
 
   function logout() {
+    const refreshToken = getRefreshToken();
+    if (refreshToken) api.logout(refreshToken).catch(() => { });
+    clearSession();
     setToken(null);
     setUsername(null);
-    window.localStorage.removeItem(AUTH_TOKEN_KEY);
-    window.localStorage.removeItem(AUTH_USERNAME_KEY);
   }
 
   const userId = useMemo(() => decodeUserId(token), [token]);

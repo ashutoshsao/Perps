@@ -1,4 +1,5 @@
 export const AUTH_TOKEN_KEY = "nebula.auth.token";
+export const AUTH_REFRESH_TOKEN_KEY = "nebula.auth.refreshToken";
 export const AUTH_USERNAME_KEY = "nebula.auth.username";
 export const slippagePresetPercents = [0.1, 0.5, 1, 2, 5];
 export const primaryMarketOrder = ["BTC", "ETH", "SOL"];

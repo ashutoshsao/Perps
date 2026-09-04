@@ -9,7 +9,7 @@ export class ApiError extends Error {
   }
 }
 
-export type BotAuth = { username: string; token: string; userId: string };
+export type BotAuth = { username: string; token: string; refreshToken: string; userId: string };
 
 type OrderPayload =
   | { orderType: "limit"; side: "buy" | "sell"; symbol: string; price: number; qty: number; leverage: number }
@@ -19,24 +19,42 @@ export type OrderResult = {
   order: { orderId: string; status: string; qty: number; filledQty: number; price: number };
 };
 
-async function request<T>(
-  path: string,
-  options: { method?: string; token?: string; body?: unknown; headers?: Record<string, string> } = {},
-): Promise<T> {
-  const { method = "GET", token, body, headers = {} } = options;
+type RequestOptions = { method?: string; auth?: BotAuth; body?: unknown; headers?: Record<string, string> };
+
+async function rawRequest(path: string, options: RequestOptions): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
+  const { method = "GET", auth, body, headers = {} } = options;
   const response = await fetch(`${Env.apiUrl}${path}`, {
     method,
     headers: {
       "content-type": "application/json",
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...(auth ? { authorization: `Bearer ${auth.token}` } : {}),
       ...headers,
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const json = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-  if (!response.ok) {
-    const message = (json.message ?? json.error ?? `HTTP ${response.status}`) as string;
-    throw new ApiError(response.status, message);
+  return { ok: response.ok, status: response.status, json };
+}
+
+// mutates auth.token in place — every caller holds the same BotAuth object
+// reference (quoter/taker/degen), so this refresh is immediately visible to
+// every subsequent call, including a websocket reconnect picking it up later
+async function refreshBotToken(auth: BotAuth): Promise<boolean> {
+  const { ok, json } = await rawRequest("/refresh", { method: "POST", body: { refreshToken: auth.refreshToken } });
+  if (!ok) return false;
+  auth.token = json.token as string;
+  return true;
+}
+
+async function request<T>(path: string, options: RequestOptions = {}, isRetry = false): Promise<T> {
+  const { ok, status, json } = await rawRequest(path, options);
+  if (!ok) {
+    if (!isRetry && options.auth && status === 401 && json.code === "TOKEN_EXPIRED") {
+      const refreshed = await refreshBotToken(options.auth);
+      if (refreshed) return request<T>(path, options, true);
+    }
+    const message = (json.message ?? json.error ?? `HTTP ${status}`) as string;
+    throw new ApiError(status, message);
   }
   return json as T;
 }
@@ -50,19 +68,19 @@ function decodeUserId(token: string): string {
 /** Sign in as the bot, creating the account on first run. */
 export async function ensureUser(username: string, name: string): Promise<BotAuth> {
   try {
-    const { token } = await request<{ token: string }>("/signin", {
+    const { token, refreshToken } = await request<{ token: string; refreshToken: string }>("/signin", {
       method: "POST",
       body: { username, password: Env.botPassword },
     });
-    return { username, token, userId: decodeUserId(token) };
+    return { username, token, refreshToken, userId: decodeUserId(token) };
   } catch (err) {
     if (!(err instanceof ApiError && err.status === 401)) throw err;
   }
-  const { token } = await request<{ token: string }>("/signup", {
+  const { token, refreshToken } = await request<{ token: string; refreshToken: string }>("/signup", {
     method: "POST",
     body: { username, name, password: Env.botPassword },
   });
-  return { username, token, userId: decodeUserId(token) };
+  return { username, token, refreshToken, userId: decodeUserId(token) };
 }
 
 export const api = {
@@ -74,7 +92,7 @@ export const api = {
   createMarket: (auth: BotAuth, spec: MarketSpec) =>
     request("/market", {
       method: "POST",
-      token: auth.token,
+      auth,
       headers: { token: Env.adminSecret },
       body: {
         symbol: spec.symbol,
@@ -85,23 +103,23 @@ export const api = {
     }),
 
   onramp: (auth: BotAuth, amountCents: number) =>
-    request("/onramp", { method: "POST", token: auth.token, body: { amount: amountCents } }),
+    request("/onramp", { method: "POST", auth, body: { amount: amountCents } }),
 
   balance: (auth: BotAuth) =>
-    request<{ response: { available: number; locked: number } }>("/balance", { token: auth.token }).then(
+    request<{ response: { available: number; locked: number } }>("/balance", { auth }).then(
       (r) => r.response,
     ),
 
   placeOrder: (auth: BotAuth, payload: OrderPayload) =>
-    request<OrderResult>("/order", { method: "POST", token: auth.token, body: payload }),
+    request<OrderResult>("/order", { method: "POST", auth, body: payload }),
 
   cancelOrder: (auth: BotAuth, orderId: string) =>
-    request(`/order/${orderId}`, { method: "DELETE", token: auth.token }),
+    request(`/order/${orderId}`, { method: "DELETE", auth }),
 
   ordersPage: (auth: BotAuth, cursor?: string) =>
     request<{ orders: { id: string; status: string }[]; nextCursor: string | null }>(
       `/orders?limit=200${cursor ? `&cursor=${cursor}` : ""}`,
-      { token: auth.token },
+      { auth },
     ),
 
   /** walks every page — a single page (200) isn't enough to find all open orders once the count exceeds that */

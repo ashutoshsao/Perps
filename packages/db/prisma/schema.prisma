@@ -13,13 +13,26 @@ datasource db {
 }
 
 model User {
-  id         String  @id @default(uuid())
-  username   String  @unique
-  name       String?
-  password   String
-  orders     Order[]
-  makerFills Fill[]  @relation("maker_user")
-  takerFills Fill[]  @relation("taker_user")
+  id            String         @id @default(uuid())
+  username      String         @unique
+  name          String?
+  password      String
+  orders        Order[]
+  makerFills    Fill[]         @relation("maker_user")
+  takerFills    Fill[]         @relation("taker_user")
+  refreshTokens RefreshToken[]
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Market {

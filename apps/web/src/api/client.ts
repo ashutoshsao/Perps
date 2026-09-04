@@ -15,6 +15,7 @@ import type {
   UserFill,
   UserOrder,
 } from "./types";
+import { clearSession, getRefreshToken, setAccessToken } from "./session";
 
 const API_URL = import.meta.env?.VITE_API_URL ?? "/api";
 
@@ -35,7 +36,34 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+// de-dupes concurrent refreshes so N requests failing at once with an expired
+// token trigger exactly one POST /refresh, not one each
+let refreshPromise: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  const currentRefreshToken = getRefreshToken();
+  if (!currentRefreshToken) return null;
+
+  if (!refreshPromise) {
+    refreshPromise = request<{ token: string }>("/refresh", { method: "POST", body: { refreshToken: currentRefreshToken } })
+      .then((data) => {
+        setAccessToken(data.token);
+        return data.token;
+      })
+      .catch(() => {
+        // the refresh token itself is invalid/expired/revoked, or its user no
+        // longer exists — nothing left to do but force a fresh signin
+        clearSession();
+        return null;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+}
+
+async function request<T>(path: string, options: RequestOptions = {}, isRetry = false): Promise<T> {
   const headers: Record<string, string> = {};
 
   if (options.body !== undefined) headers["content-type"] = "application/json";
@@ -52,6 +80,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   const data = text ? JSON.parse(text) : null;
 
   if (!response.ok) {
+    if (!isRetry && options.token && response.status === 401 && data?.code === "TOKEN_EXPIRED") {
+      const newToken = await refreshAccessToken();
+      if (newToken) return request<T>(path, { ...options, token: newToken }, true);
+    }
     throw new ApiError(response.status, data?.error ?? data?.message ?? `Request failed: ${response.status}`);
   }
 
@@ -64,6 +96,9 @@ export const api = {
   },
   signup(payload: { name?: string; username: string; password: string }) {
     return request<AuthResponse>("/signup", { method: "POST", body: payload });
+  },
+  logout(refreshToken: string) {
+    return request<{ message: string }>("/logout", { method: "POST", body: { refreshToken } });
   },
   getMarkets() {
     return request<{ markets: Market[] }>("/markets");

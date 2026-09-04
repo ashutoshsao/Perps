@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import jwt, { JwtPayload } from "jsonwebtoken";
+import jwt, { JwtPayload, TokenExpiredError } from "jsonwebtoken";
 import { Env } from "../utils/config";
 
 export const verifyAuth = (req: Request, res: Response, next: NextFunction) => {
@@ -18,6 +18,12 @@ export const verifyAuth = (req: Request, res: Response, next: NextFunction) => {
     req.userId = decoded.userId;
     next();
   } catch (error) {
+    // distinguishes "expired" from "invalid" so the client knows it can try
+    // POST /refresh instead of forcing the user all the way back to signin
+    if (error instanceof TokenExpiredError) {
+      res.status(401).json({ message: "Token expired", code: "TOKEN_EXPIRED" })
+      return
+    }
     res.status(400).json({
       message: "Invalid token"
     })

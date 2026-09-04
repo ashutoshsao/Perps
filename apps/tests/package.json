@@ -11,6 +11,7 @@
     "@repo/typescript-config": "*",
     "@types/bun": "latest",
     "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
     "eslint": "^8.57.0",
     "typescript": "5.5.4"
   },
